@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prisma Day 1 — Setup + Schema Syntax</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Fraunces:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: #2a2a2a;
+    --accent: #5DCAA5;
+    --accent2: #7F77DD;
+    --warn: #EF9F27;
+    --danger: #E24B4A;
+    --text: #e8e8e2;
+    --muted: #888880;
+    --faint: #444440;
+    --mono: 'JetBrains Mono', monospace;
+    --serif: 'Fraunces', serif;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  /* ── HEADER ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 48px 60px 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  header::before {
+    content: '';
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(93,202,165,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .header-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  header h1 {
+    font-family: var(--serif);
+    font-size: 36px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.2;
+    margin-bottom: 8px;
+  }
+  header h1 em {
+    font-style: italic;
+    color: var(--accent);
+  }
+  header p {
+    font-size: 14px;
+    color: var(--muted);
+    max-width: 500px;
+  }
+  .header-meta {
+    display: flex;
+    gap: 24px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+  }
+  .meta-chip {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 4px 12px;
+    border-radius: 20px;
+  }
+  .meta-chip span { color: var(--text); }
+
+  /* ── LAYOUT ── */
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 48px 60px 80px;
+  }
+
+  /* ── SECTION ── */
+  .section { margin-bottom: 52px; }
+  .section-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  .section h2 {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── PROSE ── */
+  p { color: var(--text); margin-bottom: 12px; line-height: 1.75; }
+  p:last-child { margin-bottom: 0; }
+
+  /* ── CODE BLOCKS ── */
+  .code-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 16px 0;
+    overflow: hidden;
+  }
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .code-lang {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .code-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent);
+  }
+  pre {
+    padding: 20px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text);
+  }
+  .kw { color: #7F77DD; }      /* keywords */
+  .str { color: #5DCAA5; }     /* strings */
+  .cm { color: #555550; font-style: italic; } /* comments */
+  .dec { color: #EF9F27; }     /* decorators / annotations */
+  .type { color: #85B7EB; }    /* types */
+  .num { color: #F0997B; }     /* numbers */
+  .fn { color: #e8e8e2; }      /* functions */
+  .prop { color: #D4537E; }    /* properties */
+
+  /* ── INLINE CODE ── */
+  code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--accent);
+  }
+
+  /* ── CALLOUT BOXES ── */
+  .callout {
+    border-left: 3px solid;
+    border-radius: 0 6px 6px 0;
+    padding: 14px 18px;
+    margin: 16px 0;
+  }
+  .callout-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .callout p { margin: 0; font-size: 13px; }
+  .callout.interview { border-color: var(--warn); background: rgba(239,159,39,0.06); }
+  .callout.interview .callout-label { color: var(--warn); }
+  .callout.gotcha { border-color: var(--danger); background: rgba(226,75,74,0.06); }
+  .callout.gotcha .callout-label { color: var(--danger); }
+  .callout.tip { border-color: var(--accent); background: rgba(93,202,165,0.06); }
+  .callout.tip .callout-label { color: var(--accent); }
+  .callout.v7 { border-color: var(--accent2); background: rgba(127,119,221,0.06); }
+  .callout.v7 .callout-label { color: var(--accent2); }
+
+  /* ── TABLE ── */
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  thead tr {
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 400;
+  }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  td.desc { color: var(--muted); font-size: 13px; }
+
+  /* ── STEP LIST ── */
+  .steps { list-style: none; padding: 0; counter-reset: step; }
+  .steps li {
+    counter-increment: step;
+    display: flex;
+    gap: 14px;
+    margin-bottom: 12px;
+    align-items: flex-start;
+  }
+  .steps li::before {
+    content: counter(step);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--bg);
+    background: var(--accent);
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .steps li p { margin: 0; }
+
+  /* ── BULLET LIST ── */
+  .bullets { list-style: none; padding: 0; }
+  .bullets li {
+    padding: 5px 0 5px 18px;
+    position: relative;
+    color: var(--text);
+    font-size: 13.5px;
+    border-bottom: 1px solid var(--faint);
+  }
+  .bullets li:last-child { border-bottom: none; }
+  .bullets li::before {
+    content: '›';
+    position: absolute;
+    left: 2px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  /* ── SUMMARY CARD ── */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    border-top: 2px solid var(--accent);
+  }
+  .summary-card h4 {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .summary-card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  /* ── EXERCISE ── */
+  .exercise {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    margin-top: 16px;
+  }
+  .exercise h3 {
+    font-family: var(--serif);
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 12px;
+  }
+
+  /* ── DIVIDER ── */
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 40px 0;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 24px 60px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  footer p { font-family: var(--mono); font-size: 11px; color: var(--faint); margin: 0; }
+  .next-day {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    background: rgba(93,202,165,0.08);
+    border: 1px solid rgba(93,202,165,0.2);
+    padding: 6px 14px;
+    border-radius: 20px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">Prisma Study Plan · April 2025</div>
+  <h1>Day 1 — <em>Setup + Schema Syntax</em></h1>
+  <p>Prisma 5 · Node.js + TypeScript + PostgreSQL (Neon) · 1hr session</p>
+  <div class="header-meta">
+    <div class="meta-chip">Phase <span>1 of 5</span></div>
+    <div class="meta-chip">Date <span>Tue Apr 1</span></div>
+    <div class="meta-chip">Stack <span>Prisma 5 · TS · Neon</span></div>
+    <div class="meta-chip">Status <span style="color:#5DCAA5">✓ Complete</span></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── SETUP ── -->
+  <div class="section">
+    <div class="section-label">01</div>
+    <h2>Project setup</h2>
+
+    <p>Use Prisma 5 — not 7. Prisma 7 moved connection config out of <code>schema.prisma</code> into a separate <code>prisma.config.ts</code> and barely any tooling or documentation covers it yet. Every job you'll interview for is on v4 or v5.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><span class="code-label">terminal</span></div>
+      <pre>mkdir prisma-learn && cd prisma-learn
+npm init -y
+npm install typescript ts-node @types/node --save-dev
+npm install <span class="str">prisma@5 @prisma/client@5</span> dotenv
+npx tsc --init
+npx prisma init</pre>
+    </div>
+
+    <p><code>prisma init</code> creates two things: <code>prisma/schema.prisma</code> (your schema file) and <code>.env</code> (your connection string). Both are required.</p>
+
+    <div class="callout v7">
+      <div class="callout-label">Prisma 7 gotcha — learned the hard way</div>
+      <p>Prisma 7 removed <code>url</code> from <code>schema.prisma</code> entirely. If you see <code>prisma.config.ts</code> in your project, you're on v7. Stick with v5 for learning — install with <code>prisma@5 @prisma/client@5</code> explicitly.</p>
+    </div>
+  </div>
+
+  <!-- ── TSCONFIG ── -->
+  <div class="section">
+    <div class="section-label">02</div>
+    <h2>tsconfig.json — working setup</h2>
+
+    <p>The default <code>tsconfig.json</code> generated by newer TypeScript versions has settings that conflict with <code>ts-node</code>. Use this config:</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">json</span><span class="code-label">tsconfig.json</span></div>
+      <pre>{
+  <span class="str">"compilerOptions"</span>: {
+    <span class="str">"target"</span>: <span class="str">"ES2020"</span>,
+    <span class="str">"module"</span>: <span class="str">"CommonJS"</span>,
+    <span class="str">"moduleResolution"</span>: <span class="str">"node"</span>,
+    <span class="str">"esModuleInterop"</span>: <span class="kw">true</span>,
+    <span class="str">"verbatimModuleSyntax"</span>: <span class="kw">false</span>,
+    <span class="str">"strict"</span>: <span class="kw">true</span>,
+    <span class="str">"skipLibCheck"</span>: <span class="kw">true</span>,
+    <span class="str">"ignoreDeprecations"</span>: <span class="str">"5.0"</span>,
+    <span class="str">"types"</span>: [<span class="str">"node"</span>]
+  }
+}</pre>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">Key changes from default</div>
+      <p><code>"module": "CommonJS"</code> — prevents ESM/CJS conflicts with ts-node. <code>"verbatimModuleSyntax": false</code> — turns off the strict import checker. <code>"ignoreDeprecations": "5.0"</code> — silences the node10 moduleResolution deprecation warning.</p>
+    </div>
+  </div>
+
+  <!-- ── SCHEMA ── -->
+  <div class="section">
+    <div class="section-label">03</div>
+    <h2>schema.prisma — the correct structure</h2>
+
+    <p>The schema file has three parts: generator, datasource, and your models. <code>url = env("DATABASE_URL")</code> in the datasource is required — without it Prisma throws on initialization.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">prisma</span><span class="code-label">prisma/schema.prisma</span></div>
+      <pre><span class="cm">// generator tells Prisma to create a TypeScript/JS client</span>
+<span class="kw">generator</span> client {
+  provider = <span class="str">"prisma-client-js"</span>   <span class="cm">// NOT "prisma-client" — that doesn't exist</span>
+}
+
+<span class="cm">// datasource tells Prisma which DB and where</span>
+<span class="kw">datasource</span> db {
+  provider = <span class="str">"postgresql"</span>
+  url      = <span class="fn">env</span>(<span class="str">"DATABASE_URL"</span>)  <span class="cm">// reads from .env — required</span>
+}
+
+<span class="kw">model</span> <span class="type">User</span> {
+  id        <span class="type">String</span>   <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  email     <span class="type">String</span>   <span class="dec">@unique</span>
+  name      <span class="type">String</span><span class="kw">?</span>             <span class="cm">// ? = nullable</span>
+  age       <span class="type">Int</span>
+  balance   <span class="type">Float</span>
+  isActive  <span class="type">Boolean</span>  <span class="dec">@default</span>(<span class="kw">true</span>)
+  metadata  <span class="type">Json</span><span class="kw">?</span>
+  createdAt <span class="type">DateTime</span> <span class="dec">@default</span>(<span class="fn">now</span>())
+  updatedAt <span class="type">DateTime</span> <span class="dec">@updatedAt</span>   <span class="cm">// Prisma auto-sets on every update</span>
+}</pre>
+    </div>
+  </div>
+
+  <!-- ── SCALARS ── -->
+  <div class="section">
+    <div class="section-label">04</div>
+    <h2>Scalar types</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Type</th><th>Maps to (Postgres)</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>String</td><td class="desc">TEXT / VARCHAR</td><td class="desc">Default for most text fields</td></tr>
+          <tr><td>Int</td><td class="desc">INTEGER</td><td class="desc">Whole numbers</td></tr>
+          <tr><td>Float</td><td class="desc">DOUBLE PRECISION</td><td class="desc">Use Decimal for money in production</td></tr>
+          <tr><td>Boolean</td><td class="desc">BOOLEAN</td><td class="desc">true / false</td></tr>
+          <tr><td>DateTime</td><td class="desc">TIMESTAMP</td><td class="desc">Always stored as UTC</td></tr>
+          <tr><td>Json</td><td class="desc">JSONB</td><td class="desc">Arbitrary JSON — not type-safe in queries</td></tr>
+          <tr><td>String?</td><td class="desc">TEXT NULL</td><td class="desc">The ? makes any type nullable</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── FIELD MODIFIERS ── -->
+  <div class="section">
+    <div class="section-label">05</div>
+    <h2>Field modifiers — know these cold</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Modifier</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>@id</td><td class="desc">Primary key</td></tr>
+          <tr><td>@unique</td><td class="desc">Unique constraint on a single field</td></tr>
+          <tr><td>@@unique([a, b])</td><td class="desc">Compound unique — the combination must be unique, not each field individually</td></tr>
+          <tr><td>@default(uuid())</td><td class="desc">Auto-generate UUID on create. Also: cuid(), now(), autoincrement()</td></tr>
+          <tr><td>@updatedAt</td><td class="desc">Prisma auto-sets this on every update — you never touch it manually</td></tr>
+          <tr><td>@map("col")</td><td class="desc">Map Prisma field name to a different DB column name</td></tr>
+          <tr><td>@@map("table")</td><td class="desc">Map model name to a different DB table name</td></tr>
+          <tr><td>@ignore</td><td class="desc">Exclude from Prisma Client (field still exists in DB)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout interview">
+      <div class="callout-label">Interview question</div>
+      <p>"What's the difference between <code>@unique</code> and <code>@@unique</code>?" — <code>@unique</code> is on a single field. <code>@@unique([email, tenantId])</code> means the <em>combination</em> must be unique — one email can exist across multiple tenants.</p>
+    </div>
+  </div>
+
+  <!-- ── ENUMS ── -->
+  <div class="section">
+    <div class="section-label">06</div>
+    <h2>Enums</h2>
+
+    <p>Enums are stored as strings in Postgres and give you full TypeScript type safety — <code>user.role</code> is typed as <code>"USER" | "ADMIN" | "MODERATOR"</code>, not just <code>string</code>.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">prisma</span></div>
+      <pre><span class="kw">enum</span> <span class="type">Role</span> {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+<span class="kw">model</span> <span class="type">User</span> {
+  id   <span class="type">String</span> <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  role <span class="type">Role</span>   <span class="dec">@default</span>(<span class="type">USER</span>)
+}</pre>
+    </div>
+  </div>
+
+  <!-- ── MIGRATION ── -->
+  <div class="section">
+    <div class="section-label">07</div>
+    <h2>Running your first migration</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span></div>
+      <pre>npx prisma migrate dev --name init</pre>
+    </div>
+
+    <p>This does three things in order:</p>
+    <ol class="steps" style="margin-top:12px">
+      <li><p>Creates a SQL file in <code>prisma/migrations/[timestamp]_init/migration.sql</code></p></li>
+      <li><p>Applies it to your database</p></li>
+      <li><p>Regenerates the Prisma Client with the latest types</p></li>
+    </ol>
+
+    <p style="margin-top:16px">Open the generated <code>migration.sql</code> and read it. Get comfortable with what Prisma produces — it matters when debugging slow queries or fixing failed migrations in production.</p>
+
+    <div class="callout tip">
+      <div class="callout-label">Tip</div>
+      <p>After migrating, run <code>npx prisma studio</code> to open a browser UI at <code>localhost:5555</code>. You can inspect and edit your data visually — useful for verifying migrations worked correctly.</p>
+    </div>
+  </div>
+
+  <!-- ── CRUD ── -->
+  <div class="section">
+    <div class="section-label">08</div>
+    <h2>First CRUD operations</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">src/index.ts</span></div>
+      <pre><span class="kw">import</span> <span class="str">'dotenv/config'</span>
+<span class="kw">import</span> { <span class="type">PrismaClient</span> } <span class="kw">from</span> <span class="str">'@prisma/client'</span>
+
+<span class="kw">const</span> prisma = <span class="kw">new</span> <span class="type">PrismaClient</span>()
+
+<span class="kw">async function</span> <span class="fn">main</span>() {
+  <span class="cm">// CREATE</span>
+  <span class="kw">const</span> user = <span class="kw">await</span> prisma.user.<span class="fn">create</span>({
+    data: { email: <span class="str">'anil@test.com'</span>, name: <span class="str">'Anil'</span>, age: <span class="num">28</span>, balance: <span class="num">1000.00</span> }
+  })
+
+  <span class="cm">// FIND</span>
+  <span class="kw">const</span> found = <span class="kw">await</span> prisma.user.<span class="fn">findUnique</span>({
+    where: { email: <span class="str">'anil@test.com'</span> }
+  })
+
+  <span class="cm">// UPDATE</span>
+  <span class="kw">const</span> updated = <span class="kw">await</span> prisma.user.<span class="fn">update</span>({
+    where: { email: <span class="str">'anil@test.com'</span> },
+    data: { balance: <span class="num">1500.00</span> }
+  })
+  console.<span class="fn">log</span>(<span class="str">'updatedAt changed:'</span>, user.updatedAt !== updated.updatedAt) <span class="cm">// true</span>
+
+  <span class="cm">// DELETE</span>
+  <span class="kw">await</span> prisma.user.<span class="fn">delete</span>({ where: { email: <span class="str">'anil@test.com'</span> } })
+}
+
+<span class="fn">main</span>()
+  .<span class="fn">catch</span>(console.error)
+  .<span class="fn">finally</span>(() => prisma.<span class="fn">$disconnect</span>())</pre>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">Gotcha — @updatedAt is client-side</div>
+      <p><code>@updatedAt</code> is injected by the Prisma Client, not the database. If you update a row directly via raw SQL or another tool, <code>updatedAt</code> won't change. In production, this means only go through Prisma for writes — don't mix direct DB access.</p>
+    </div>
+  </div>
+
+  <!-- ── DB SETUP ── -->
+  <div class="section">
+    <div class="section-label">09</div>
+    <h2>Database setup — Neon.tech</h2>
+
+    <ol class="steps">
+      <li><p>Go to <strong>neon.tech</strong> → sign up with GitHub → create project named <code>prisma-learn</code>, region US East</p></li>
+      <li><p>Click <strong>Connection string</strong> → select <strong>Prisma</strong> → copy the URL</p></li>
+      <li><p>Paste into <code>.env</code>: <code>DATABASE_URL="postgresql://..."</code></p></li>
+      <li><p>Run <code>npx prisma migrate dev --name init</code> — table appears in Neon dashboard</p></li>
+    </ol>
+
+    <div class="callout tip">
+      <div class="callout-label">Important</div>
+      <p>Verify <code>.env</code> is in your <code>.gitignore</code> before pushing to GitHub. Prisma adds it automatically but always check — a leaked Neon connection string is a live DB credential.</p>
+    </div>
+  </div>
+
+  <!-- ── PRACTICE EXERCISE ── -->
+  <div class="section">
+    <div class="section-label">10</div>
+    <h2>Practice exercise — completed</h2>
+
+    <p>Build a <code>Product</code> model from spec. Solution:</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">prisma</span><span class="code-label">correct solution</span></div>
+      <pre><span class="kw">enum</span> <span class="type">Category</span> {
+  ELECTRONICS
+  CLOTHING
+  FOOD
+}
+
+<span class="kw">model</span> <span class="type">Product</span> {
+  id          <span class="type">String</span>   <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  name        <span class="type">String</span>
+  description <span class="type">String</span><span class="kw">?</span>           <span class="cm">// optional — ? required</span>
+  price       <span class="type">Float</span>
+  sku         <span class="type">String</span>   <span class="dec">@unique</span>
+  category    <span class="type">Category</span>
+  inStock     <span class="type">Boolean</span>  <span class="dec">@default</span>(<span class="kw">true</span>)
+  tags        <span class="type">Json</span><span class="kw">?</span>
+  createdAt   <span class="type">DateTime</span> <span class="dec">@default</span>(<span class="fn">now</span>())
+  updatedAt   <span class="type">DateTime</span> <span class="dec">@updatedAt</span>
+}</pre>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">Common mistake</div>
+      <p>Missing the <code>?</code> on <code>description</code> — the spec said optional but it's easy to forget. In interviews, always ask "is this field required?" before writing every field.</p>
+    </div>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">11</div>
+    <h2>Day 1 summary</h2>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h4>Setup</h4>
+        <p>Prisma 5, Neon Postgres, ts-node with CommonJS tsconfig</p>
+      </div>
+      <div class="summary-card">
+        <h4>Schema</h4>
+        <p>generator + datasource + models. url in datasource is required.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Scalars</h4>
+        <p>String, Int, Float, Boolean, DateTime, Json. Add ? for nullable.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Modifiers</h4>
+        <p>@id, @unique, @@unique, @default, @updatedAt, @map, @@map</p>
+      </div>
+      <div class="summary-card">
+        <h4>Enums</h4>
+        <p>Stored as strings in Postgres. Full TS type safety on the client.</p>
+      </div>
+      <div class="summary-card">
+        <h4>CRUD</h4>
+        <p>create, findUnique, update, delete. Always call $disconnect() in finally.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Prisma Study Plan · April 2025 · Anil</p>
+  <span class="next-day">Day 2 → Relations: 1:1, 1:N, M:N</span>
+</footer>
+
+</body>
+</html>
