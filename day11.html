@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prisma Day 12 — Raw SQL + When to Escape Prisma</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Fraunces:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: #2a2a2a;
+    --accent: #5DCAA5;
+    --accent2: #7F77DD;
+    --warn: #EF9F27;
+    --danger: #E24B4A;
+    --blue: #85B7EB;
+    --text: #e8e8e2;
+    --muted: #888880;
+    --faint: #444440;
+    --mono: 'JetBrains Mono', monospace;
+    --serif: 'Fraunces', serif;
+    --sans: 'DM Sans', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.7; }
+
+  header { border-bottom: 1px solid var(--border); padding: 48px 60px 40px; position: relative; overflow: hidden; }
+  header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 300px; height: 300px; background: radial-gradient(circle, rgba(133,183,235,0.07) 0%, transparent 70%); pointer-events: none; }
+  .header-tag { font-family: var(--mono); font-size: 11px; color: var(--blue); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  header h1 { font-family: var(--serif); font-size: 36px; font-weight: 600; color: #fff; line-height: 1.2; margin-bottom: 8px; }
+  header h1 em { font-style: italic; color: var(--blue); }
+  header p { font-size: 14px; color: var(--muted); max-width: 560px; }
+  .header-meta { display: flex; gap: 24px; margin-top: 24px; flex-wrap: wrap; }
+  .meta-chip { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); padding: 4px 12px; border-radius: 20px; }
+  .meta-chip span { color: var(--text); }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 48px 60px 80px; }
+
+  .section { margin-bottom: 52px; }
+  .section-label { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--blue); margin-bottom: 6px; }
+  .section h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
+  p { color: var(--text); margin-bottom: 12px; line-height: 1.75; }
+  p:last-child { margin-bottom: 0; }
+
+  .code-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 16px 0; overflow: hidden; }
+  .code-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .code-lang { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .code-label { font-family: var(--mono); font-size: 10px; color: var(--blue); }
+  .code-label.good { color: var(--accent); }
+  .code-label.danger { color: var(--danger); }
+  .code-label.warn { color: var(--warn); }
+  pre { padding: 20px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; color: var(--text); }
+  .kw { color: #7F77DD; }
+  .str { color: #5DCAA5; }
+  .cm { color: #555550; font-style: italic; }
+  .dec { color: #EF9F27; }
+  .type { color: #85B7EB; }
+  .num { color: #F0997B; }
+  .fn { color: #e8e8e2; }
+  .good { color: #5DCAA5; }
+  .bad { color: #E24B4A; }
+
+  code { font-family: var(--mono); font-size: 12px; background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--accent); }
+
+  .callout { border-left: 3px solid; border-radius: 0 6px 6px 0; padding: 14px 18px; margin: 16px 0; }
+  .callout-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+  .callout p { margin: 0; font-size: 13px; }
+  .callout.interview { border-color: var(--warn); background: rgba(239,159,39,0.06); }
+  .callout.interview .callout-label { color: var(--warn); }
+  .callout.gotcha { border-color: var(--danger); background: rgba(226,75,74,0.06); }
+  .callout.gotcha .callout-label { color: var(--danger); }
+  .callout.tip { border-color: var(--accent); background: rgba(93,202,165,0.06); }
+  .callout.tip .callout-label { color: var(--accent); }
+  .callout.rule { border-color: var(--accent2); background: rgba(127,119,221,0.06); }
+  .callout.rule .callout-label { color: var(--accent2); }
+
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); padding: 10px 14px; text-align: left; font-weight: 400; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--mono); font-size: 12px; color: var(--blue); }
+  td.desc { color: var(--muted); font-size: 13px; }
+  td.good { color: var(--accent); font-size: 13px; }
+  td.bad { color: var(--danger); font-size: 13px; }
+
+  .method-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin: 16px 0; }
+  .method-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; border-top: 2px solid; }
+  .method-card:nth-child(1) { border-top-color: #5DCAA5; }
+  .method-card:nth-child(2) { border-top-color: #7F77DD; }
+  .method-card:nth-child(3) { border-top-color: #85B7EB; }
+  .method-card:nth-child(4) { border-top-color: #E24B4A; }
+  .method-card h4 { font-family: var(--mono); font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+  .method-card:nth-child(1) h4 { color: #5DCAA5; }
+  .method-card:nth-child(2) h4 { color: #7F77DD; }
+  .method-card:nth-child(3) h4 { color: #85B7EB; }
+  .method-card:nth-child(4) h4 { color: #E24B4A; }
+  .method-card p { font-size: 12px; color: var(--muted); margin: 0; }
+
+  .when-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 16px 0; }
+  .when-row { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; display: flex; gap: 16px; align-items: flex-start; }
+  .when-num { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--bg); background: var(--blue); width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .when-body h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+  .when-body p { font-size: 12px; color: var(--muted); margin: 0; }
+
+  .explain-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 16px 0; }
+  .explain-row { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; display: flex; gap: 12px; align-items: center; }
+  .explain-icon { font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; white-space: nowrap; flex-shrink: 0; }
+  .explain-icon.bad { background: rgba(226,75,74,0.15); color: var(--danger); }
+  .explain-icon.ok { background: rgba(239,159,39,0.15); color: var(--warn); }
+  .explain-icon.good { background: rgba(93,202,165,0.15); color: var(--accent); }
+  .explain-text { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .explain-text span { color: var(--text); }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; border-top: 2px solid var(--blue); }
+  .summary-card h4 { font-family: var(--mono); font-size: 11px; color: var(--blue); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .summary-card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  footer { border-top: 1px solid var(--border); padding: 24px 60px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  footer p { font-family: var(--mono); font-size: 11px; color: var(--faint); margin: 0; }
+  .next-day { font-family: var(--mono); font-size: 11px; color: var(--accent); background: rgba(93,202,165,0.08); border: 1px solid rgba(93,202,165,0.2); padding: 6px 14px; border-radius: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">Prisma Study Plan · April 2025</div>
+  <h1>Day 12 — <em>Raw SQL + When to Escape Prisma</em></h1>
+  <p>$queryRaw · $executeRaw · SQL injection safety · EXPLAIN ANALYZE · when NOT to use Prisma</p>
+  <div class="header-meta">
+    <div class="meta-chip">Phase <span>3 of 5</span></div>
+    <div class="meta-chip">Date <span>Wed Apr 16</span></div>
+    <div class="meta-chip">Stack <span>Prisma 5 · TS · Neon</span></div>
+    <div class="meta-chip">Status <span style="color:#5DCAA5">✓ Complete</span></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── THREE METHODS ── -->
+  <div class="section">
+    <div class="section-label">01</div>
+    <h2>The three raw SQL methods</h2>
+
+    <div class="method-grid">
+      <div class="method-card">
+        <h4>$queryRaw</h4>
+        <p>Read data, get typed results. Use TypeScript generic for type safety.</p>
+      </div>
+      <div class="method-card">
+        <h4>$executeRaw</h4>
+        <p>Mutations — INSERT, UPDATE, DELETE. Returns number of affected rows.</p>
+      </div>
+      <div class="method-card">
+        <h4>Prisma.sql</h4>
+        <p>Tagged template for safe interpolation. Parameterizes values automatically.</p>
+      </div>
+      <div class="method-card">
+        <h4>$queryRawUnsafe</h4>
+        <p>Dynamic table/column names only. Never use with user input — SQL injection risk.</p>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">$queryRaw — with TypeScript generic</span></div>
+      <pre><span class="cm">// Without generic — returns unknown[]</span>
+<span class="kw">const</span> users = <span class="kw">await</span> prisma.<span class="fn">$queryRaw</span>`
+  SELECT id, email, name FROM "UserBlog" WHERE age > <span class="num">25</span>
+`
+
+<span class="cm">// With generic — fully typed</span>
+<span class="kw">const</span> users = <span class="kw">await</span> prisma.<span class="fn">$queryRaw</span>&lt;
+  { id: <span class="type">string</span>; email: <span class="type">string</span>; name: <span class="type">string</span> }[]
+&gt;`
+  SELECT id, email, name FROM "UserBlog" WHERE age > <span class="num">25</span>
+`
+<span class="cm">// users[0].email is string — TypeScript knows</span></pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">$executeRaw — mutations</span></div>
+      <pre><span class="cm">// Returns number of affected rows</span>
+<span class="kw">const</span> affected = <span class="kw">await</span> prisma.<span class="fn">$executeRaw</span>`
+  UPDATE "UserBlog" SET "isActive" = <span class="kw">false</span>
+  WHERE "lastLoginAt" < NOW() - INTERVAL <span class="str">'90 days'</span>
+`
+console.<span class="fn">log</span>(<span class="str">'Rows affected:'</span>, affected)</pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">Prisma.sql — dynamic conditions</span></div>
+      <pre><span class="kw">const</span> minAge = <span class="num">18</span>
+<span class="kw">const</span> status = <span class="str">'ACTIVE'</span>
+
+<span class="cm">// Prisma parameterizes ${} values automatically — SQL injection safe</span>
+<span class="kw">const</span> users = <span class="kw">await</span> prisma.<span class="fn">$queryRaw</span>`
+  SELECT * FROM "UserBlog"
+  WHERE age > ${minAge}
+  AND status = ${status}
+`
+
+<span class="cm">// Compose dynamic conditions</span>
+<span class="kw">const</span> condition = <span class="type">Prisma</span>.<span class="fn">sql</span>`age > ${minAge}`
+<span class="kw">const</span> users = <span class="kw">await</span> prisma.<span class="fn">$queryRaw</span>`
+  SELECT * FROM "UserBlog" WHERE ${condition}
+`</pre>
+    </div>
+  </div>
+
+  <!-- ── SQL INJECTION ── -->
+  <div class="section">
+    <div class="section-label">02</div>
+    <h2>SQL injection safety</h2>
+
+    <p>The tagged template syntax is safe because Prisma sends values as parameters, never inline SQL.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">safe — parameterized</span></div>
+      <pre><span class="kw">const</span> email = <span class="str">"admin@test.com' OR '1'='1"</span>  <span class="cm">// attempted injection</span>
+
+<span class="cm">// ✅ Safe — Prisma sends as $1 parameter</span>
+<span class="kw">const</span> user = <span class="kw">await</span> prisma.<span class="fn">$queryRaw</span>`
+  SELECT * FROM "UserBlog" WHERE email = ${email}
+`
+<span class="cm">// Postgres sees: WHERE email = $1</span>
+<span class="cm">// $1 = "admin@test.com' OR '1'='1" — treated as plain string, not SQL</span></pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label danger">never do this — injection risk</span></div>
+      <pre><span class="bad">// ❌ NEVER interpolate directly into $queryRawUnsafe</span>
+<span class="kw">const</span> email = req.body.email  <span class="cm">// user input</span>
+<span class="bad">await prisma.$queryRawUnsafe(</span>
+<span class="bad">  `SELECT * FROM "UserBlog" WHERE email = '${email}'`</span>
+<span class="bad">)</span>
+<span class="cm">// Attacker sends: ' OR '1'='1 → returns all users</span>
+
+<span class="cm">// ✅ $queryRawUnsafe only for hardcoded values you control</span>
+<span class="kw">const</span> tableName = <span class="str">'UserBlog'</span>  <span class="cm">// hardcoded — not user input</span>
+<span class="kw">await</span> prisma.<span class="fn">$queryRawUnsafe</span>(<span class="str">`SELECT * FROM "<span class="kw">${tableName}</span>"`</span>)</pre>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">$queryRawUnsafe rule</div>
+      <p>Only use <code>$queryRawUnsafe</code> when you need dynamic table or column names — and only with hardcoded values you control, never user input. For dynamic values (user input, request params) always use the tagged template syntax.</p>
+    </div>
+  </div>
+
+  <!-- ── WHEN NOT TO USE PRISMA ── -->
+  <div class="section">
+    <div class="section-label">03</div>
+    <h2>When NOT to use Prisma ORM</h2>
+
+    <p>The most common senior-level interview question. Have a crisp answer ready.</p>
+
+    <div class="when-grid">
+      <div class="when-row">
+        <div class="when-num">1</div>
+        <div class="when-body">
+          <h4>Complex aggregations — CTEs and window functions</h4>
+          <p>Prisma groupBy is verbose and limited. CTEs and window functions are impossible. Drop to $queryRaw.</p>
+        </div>
+      </div>
+      <div class="when-row">
+        <div class="when-num">2</div>
+        <div class="when-body">
+          <h4>Bulk operations at scale</h4>
+          <p>createMany has no nested relations and is slow for millions of rows. Raw SQL INSERT is orders of magnitude faster.</p>
+        </div>
+      </div>
+      <div class="when-row">
+        <div class="when-num">3</div>
+        <div class="when-body">
+          <h4>Full-text search</h4>
+          <p>Postgres has native to_tsvector / plainto_tsquery support. Prisma only supports basic contains which uses ILIKE — not full-text.</p>
+        </div>
+      </div>
+      <div class="when-row">
+        <div class="when-num">4</div>
+        <div class="when-body">
+          <h4>Generated SQL is too slow</h4>
+          <p>EXPLAIN ANALYZE shows sequential scan. Prisma's generated query can't be optimized further — drop to raw SQL for full control.</p>
+        </div>
+      </div>
+      <div class="when-row">
+        <div class="when-num">5</div>
+        <div class="when-body">
+          <h4>Query is simpler in SQL than Prisma</h4>
+          <p>When the Prisma query API becomes more complex than the equivalent SQL — SQL wins on readability.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── REAL EXAMPLES ── -->
+  <div class="section">
+    <div class="section-label">04</div>
+    <h2>Real examples — Prisma vs raw SQL</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">window function — running total</span></div>
+      <pre><span class="cm">// Impossible in Prisma ORM — must use $queryRaw</span>
+<span class="kw">const</span> result = <span class="kw">await</span> prisma.<span class="fn">$queryRaw</span>&lt;
+  { id: <span class="type">string</span>; amount: <span class="type">number</span>; runningTotal: <span class="type">number</span> }[]
+&gt;`
+  SELECT
+    id,
+    amount,
+    SUM(amount) OVER (
+      PARTITION BY "userId"
+      ORDER BY "createdAt"
+    ) as "runningTotal"
+  FROM "Transaction"
+  WHERE "userId" = ${userId}
+`</pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">CTE — multi-step query</span></div>
+      <pre><span class="cm">// Prisma can't express CTEs — use $queryRaw</span>
+<span class="kw">const</span> result = <span class="kw">await</span> prisma.<span class="fn">$queryRaw</span>`
+  WITH active_users AS (
+    SELECT id FROM "UserBlog" WHERE "isActive" = <span class="kw">true</span>
+  ),
+  user_totals AS (
+    SELECT "userId", SUM(amount) as total
+    FROM "Transaction"
+    WHERE "userId" IN (SELECT id FROM active_users)
+    GROUP BY "userId"
+  )
+  SELECT u.email, ut.total
+  FROM "UserBlog" u
+  JOIN user_totals ut ON u.id = ut."userId"
+  ORDER BY ut.total DESC
+`</pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">full-text search</span></div>
+      <pre><span class="kw">const</span> results = <span class="kw">await</span> prisma.<span class="fn">$queryRaw</span>&lt;
+  { id: <span class="type">string</span>; title: <span class="type">string</span>; rank: <span class="type">number</span> }[]
+&gt;`
+  SELECT id, title,
+    ts_rank(
+      to_tsvector(<span class="str">'english'</span>, title || <span class="str">' '</span> || content),
+      plainto_tsquery(<span class="str">'english'</span>, ${searchTerm})
+    ) as rank
+  FROM "Post"
+  WHERE to_tsvector(<span class="str">'english'</span>, title || <span class="str">' '</span> || content)
+    @@ plainto_tsquery(<span class="str">'english'</span>, ${searchTerm})
+  ORDER BY rank DESC
+  LIMIT <span class="num">10</span>
+`</pre>
+    </div>
+  </div>
+
+  <!-- ── EXPLAIN ANALYZE ── -->
+  <div class="section">
+    <div class="section-label">05</div>
+    <h2>EXPLAIN ANALYZE — reading query plans</h2>
+
+    <p>When a query is slow, run EXPLAIN ANALYZE to see what Postgres is actually doing under the hood.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">how to run it</span></div>
+      <pre><span class="kw">const</span> plan = <span class="kw">await</span> prisma.<span class="fn">$queryRaw</span>`
+  EXPLAIN ANALYZE
+  SELECT * FROM "Post" WHERE "userId" = ${userId}
+`
+console.<span class="fn">log</span>(plan)</pre>
+    </div>
+
+    <p>What to look for in the output:</p>
+
+    <div class="explain-grid">
+      <div class="explain-row">
+        <span class="explain-icon bad">BAD</span>
+        <span class="explain-text"><span>Seq Scan on "Post"</span> — full table scan, no index used. Add @@index on that column.</span>
+      </div>
+      <div class="explain-row">
+        <span class="explain-icon good">GOOD</span>
+        <span class="explain-text"><span>Index Scan on "Post"</span> — using an index. Query is efficient.</span>
+      </div>
+      <div class="explain-row">
+        <span class="explain-icon ok">OK</span>
+        <span class="explain-text"><span>Bitmap Heap Scan on "Post"</span> — partial index usage. Acceptable for low selectivity queries.</span>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">Workflow</div>
+      <p>Enable <code>log: ['query']</code> → spot slow queries → run EXPLAIN ANALYZE → if Seq Scan on large table → add <code>@@index</code> in schema → if still slow → rewrite as $queryRaw with optimized SQL.</p>
+    </div>
+  </div>
+
+  <!-- ── INTERVIEW ANSWER ── -->
+  <div class="section">
+    <div class="section-label">06</div>
+    <h2>The interview answer — memorize this</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">text</span><span class="code-label warn">"when would you NOT use Prisma ORM?"</span></div>
+      <pre><span class="str">"Five situations:"</span>
+
+<span class="num">1.</span> Complex reporting with CTEs or window functions
+   — Prisma can't express those, $queryRaw with SQL
+
+<span class="num">2.</span> Bulk operations at scale
+   — raw SQL INSERT is orders of magnitude faster than createMany
+
+<span class="num">3.</span> Full-text search
+   — Postgres has native to_tsvector support Prisma doesn't expose
+
+<span class="num">4.</span> EXPLAIN ANALYZE shows sequential scan I can't fix with an index
+   — drop to $queryRaw for full SQL control
+
+<span class="num">5.</span> When the Prisma query API is more complex than the SQL
+   — SQL readability wins
+
+<span class="str">"In all cases I use $queryRaw with a TypeScript generic</span>
+<span class="str"> to keep type safety while getting full SQL control."</span></pre>
+    </div>
+  </div>
+
+  <!-- ── CHEAT SHEET ── -->
+  <div class="section">
+    <div class="section-label">07</div>
+    <h2>Method cheat sheet</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Method</th><th>Use for</th><th>Returns</th><th>Type safe?</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>$queryRaw</td>
+            <td class="desc">SELECT — read data</td>
+            <td class="desc">unknown[] or T[] with generic</td>
+            <td class="good">Yes — with generic</td>
+          </tr>
+          <tr>
+            <td>$executeRaw</td>
+            <td class="desc">INSERT / UPDATE / DELETE</td>
+            <td class="desc">number (rows affected)</td>
+            <td class="good">Yes</td>
+          </tr>
+          <tr>
+            <td>Prisma.sql</td>
+            <td class="desc">Dynamic conditions inside $queryRaw</td>
+            <td class="desc">SQL fragment</td>
+            <td class="good">Yes — parameterized</td>
+          </tr>
+          <tr>
+            <td>$queryRawUnsafe</td>
+            <td class="desc">Dynamic table/column names only</td>
+            <td class="desc">unknown[]</td>
+            <td class="bad">No — injection risk with user input</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">08</div>
+    <h2>Day 12 summary</h2>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h4>$queryRaw</h4>
+        <p>Always add TypeScript generic for type safety. Default returns unknown[].</p>
+      </div>
+      <div class="summary-card">
+        <h4>$executeRaw</h4>
+        <p>Mutations only. Returns affected row count. No type generic needed.</p>
+      </div>
+      <div class="summary-card">
+        <h4>SQL injection</h4>
+        <p>Tagged template = safe. $queryRawUnsafe with user input = never. Prisma parameterizes ${} automatically.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Window functions</h4>
+        <p>Prisma has zero native support. Always use $queryRaw. Common in fintech reporting.</p>
+      </div>
+      <div class="summary-card">
+        <h4>EXPLAIN ANALYZE</h4>
+        <p>Seq Scan = bad, needs index. Index Scan = good. Run when queries are slow.</p>
+      </div>
+      <div class="summary-card">
+        <h4>When to escape</h4>
+        <p>CTEs, window functions, bulk inserts, full-text search, slow generated SQL.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Prisma Study Plan · April 2025 · Anil</p>
+  <span class="next-day">Day 13 → Soft deletes + audit trail</span>
+</footer>
+
+</body>
+</html>

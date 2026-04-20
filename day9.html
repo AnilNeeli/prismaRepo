@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prisma Day 10 — Migrations Deep Dive</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Fraunces:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: #2a2a2a;
+    --accent: #5DCAA5;
+    --accent2: #7F77DD;
+    --warn: #EF9F27;
+    --danger: #E24B4A;
+    --blue: #85B7EB;
+    --text: #e8e8e2;
+    --muted: #888880;
+    --faint: #444440;
+    --mono: 'JetBrains Mono', monospace;
+    --serif: 'Fraunces', serif;
+    --sans: 'DM Sans', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.7; }
+
+  header { border-bottom: 1px solid var(--border); padding: 48px 60px 40px; position: relative; overflow: hidden; }
+  header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 300px; height: 300px; background: radial-gradient(circle, rgba(239,159,39,0.07) 0%, transparent 70%); pointer-events: none; }
+  .header-tag { font-family: var(--mono); font-size: 11px; color: var(--warn); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  header h1 { font-family: var(--serif); font-size: 36px; font-weight: 600; color: #fff; line-height: 1.2; margin-bottom: 8px; }
+  header h1 em { font-style: italic; color: var(--warn); }
+  header p { font-size: 14px; color: var(--muted); max-width: 560px; }
+  .header-meta { display: flex; gap: 24px; margin-top: 24px; flex-wrap: wrap; }
+  .meta-chip { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); padding: 4px 12px; border-radius: 20px; }
+  .meta-chip span { color: var(--text); }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 48px 60px 80px; }
+
+  .section { margin-bottom: 52px; }
+  .section-label { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--warn); margin-bottom: 6px; }
+  .section h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
+  p { color: var(--text); margin-bottom: 12px; line-height: 1.75; }
+  p:last-child { margin-bottom: 0; }
+
+  .code-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 16px 0; overflow: hidden; }
+  .code-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .code-lang { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .code-label { font-family: var(--mono); font-size: 10px; color: var(--warn); }
+  .code-label.good { color: var(--accent); }
+  .code-label.danger { color: var(--danger); }
+  pre { padding: 20px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; color: var(--text); }
+  .kw { color: #7F77DD; }
+  .str { color: #5DCAA5; }
+  .cm { color: #555550; font-style: italic; }
+  .dec { color: #EF9F27; }
+  .type { color: #85B7EB; }
+  .num { color: #F0997B; }
+  .fn { color: #e8e8e2; }
+  .good { color: #5DCAA5; }
+  .bad { color: #E24B4A; }
+
+  code { font-family: var(--mono); font-size: 12px; background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--accent); }
+
+  .callout { border-left: 3px solid; border-radius: 0 6px 6px 0; padding: 14px 18px; margin: 16px 0; }
+  .callout-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+  .callout p { margin: 0; font-size: 13px; }
+  .callout.interview { border-color: var(--warn); background: rgba(239,159,39,0.06); }
+  .callout.interview .callout-label { color: var(--warn); }
+  .callout.gotcha { border-color: var(--danger); background: rgba(226,75,74,0.06); }
+  .callout.gotcha .callout-label { color: var(--danger); }
+  .callout.tip { border-color: var(--accent); background: rgba(93,202,165,0.06); }
+  .callout.tip .callout-label { color: var(--accent); }
+  .callout.rule { border-color: var(--accent2); background: rgba(127,119,221,0.06); }
+  .callout.rule .callout-label { color: var(--accent2); }
+
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); padding: 10px 14px; text-align: left; font-weight: 400; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--mono); font-size: 12px; color: var(--warn); }
+  td.desc { color: var(--muted); font-size: 13px; }
+  td.good { color: var(--accent); font-size: 13px; }
+  td.bad { color: var(--danger); font-size: 13px; }
+
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .compare-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .compare-card h4 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .compare-card.dev h4 { color: var(--accent); }
+  .compare-card.deploy h4 { color: var(--warn); }
+  .compare-card ul { list-style: none; padding: 0; }
+  .compare-card ul li { font-size: 12.5px; color: var(--muted); padding: 4px 0 4px 14px; position: relative; border-bottom: 1px solid var(--faint); }
+  .compare-card ul li:last-child { border-bottom: none; }
+  .compare-card ul li::before { content: '›'; position: absolute; left: 2px; }
+  .compare-card.dev ul li::before { color: var(--accent); }
+  .compare-card.deploy ul li::before { color: var(--warn); }
+
+  .expand-contract { margin: 16px 0; }
+  .ec-phase { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin-bottom: 8px; }
+  .ec-phase-header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .ec-badge { font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+  .ec-badge.expand { background: rgba(93,202,165,0.15); color: var(--accent); }
+  .ec-badge.contract { background: rgba(239,159,39,0.15); color: var(--warn); }
+  .ec-phase h4 { font-size: 13px; font-weight: 600; color: var(--text); }
+  .ec-phase p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  .data-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; margin: 12px 0; }
+  .data-table th { color: var(--muted); padding: 6px 12px; text-align: left; border-bottom: 1px solid var(--border); font-weight: 400; }
+  .data-table td { padding: 6px 12px; border-bottom: 1px solid var(--faint); }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table td.null { color: var(--danger); }
+  .data-table td.filled { color: var(--accent); }
+  .data-table td.skip { color: var(--faint); }
+
+  .recovery-flow { margin: 16px 0; }
+  .recovery-step { display: flex; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--faint); align-items: flex-start; }
+  .recovery-step:last-child { border-bottom: none; }
+  .recovery-num { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--bg); background: var(--warn); width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .recovery-body h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+  .recovery-body p { font-size: 12px; color: var(--muted); margin: 0; font-family: var(--mono); }
+
+  .idempotent-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .idempotent-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .idempotent-card h4 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .idempotent-card.bad h4 { color: var(--danger); }
+  .idempotent-card.good h4 { color: var(--accent); }
+  .idempotent-card ul { list-style: none; padding: 0; }
+  .idempotent-card ul li { font-family: var(--mono); font-size: 11.5px; padding: 3px 0; border-bottom: 1px solid var(--faint); }
+  .idempotent-card ul li:last-child { border-bottom: none; }
+  .idempotent-card.bad ul li { color: var(--danger); }
+  .idempotent-card.good ul li { color: var(--accent); }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; border-top: 2px solid var(--warn); }
+  .summary-card h4 { font-family: var(--mono); font-size: 11px; color: var(--warn); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .summary-card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  footer { border-top: 1px solid var(--border); padding: 24px 60px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  footer p { font-family: var(--mono); font-size: 11px; color: var(--faint); margin: 0; }
+  .next-day { font-family: var(--mono); font-size: 11px; color: var(--accent); background: rgba(93,202,165,0.08); border: 1px solid rgba(93,202,165,0.2); padding: 6px 14px; border-radius: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">Prisma Study Plan · April 2025</div>
+  <h1>Day 10 — <em>Migrations Deep Dive</em></h1>
+  <p>migrate dev vs deploy · shadow DB · expand-contract · failed migrations · idempotent SQL</p>
+  <div class="header-meta">
+    <div class="meta-chip">Phase <span>3 of 5</span></div>
+    <div class="meta-chip">Date <span>Mon Apr 14</span></div>
+    <div class="meta-chip">Stack <span>Prisma 5 · TS · Neon</span></div>
+    <div class="meta-chip">Status <span style="color:#5DCAA5">✓ Complete</span></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── MIGRATE DEV VS DEPLOY ── -->
+  <div class="section">
+    <div class="section-label">01</div>
+    <h2>migrate dev vs migrate deploy</h2>
+
+    <div class="compare-grid">
+      <div class="compare-card dev">
+        <h4>migrate dev — local only</h4>
+        <ul>
+          <li>Detects schema changes</li>
+          <li>Generates new SQL migration file</li>
+          <li>Applies migration to local DB</li>
+          <li>Regenerates Prisma Client</li>
+          <li>Runs seed script if configured</li>
+          <li>Resets DB if drift detected</li>
+        </ul>
+      </div>
+      <div class="compare-card deploy">
+        <h4>migrate deploy — production</h4>
+        <ul>
+          <li>Checks _prisma_migrations table</li>
+          <li>Applies pending migrations in order</li>
+          <li>Never generates new files</li>
+          <li>Never runs seed script</li>
+          <li>Never resets DB</li>
+          <li>Safe for production</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><span class="code-label">commands</span></div>
+      <pre><span class="cm"># Local development</span>
+npx prisma migrate dev --name add-age-to-user
+
+<span class="cm"># Production / CI-CD pipeline</span>
+npx prisma migrate deploy
+
+<span class="cm"># Check migration status</span>
+npx prisma migrate status</pre>
+    </div>
+
+    <div class="callout interview">
+      <div class="callout-label">Interview question</div>
+      <p>"How do you handle migrations in your CI/CD pipeline?" — <code>migrate deploy</code> runs automatically on deploy, never <code>migrate dev</code>. <code>migrate dev</code> is local only — it can reset your DB if it detects drift, which would be catastrophic in production.</p>
+    </div>
+  </div>
+
+  <!-- ── MIGRATIONS FOLDER ── -->
+  <div class="section">
+    <div class="section-label">02</div>
+    <h2>Migrations folder structure</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><span class="code-label">structure</span></div>
+      <pre>prisma/
+  migrations/
+    20250401120000_init/
+      migration.sql          <span class="cm">← raw SQL Prisma generated</span>
+    20250402130000_add_age/
+      migration.sql
+    20250403140000_blog_schema/
+      migration.sql</pre>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">Never edit a migration after applying it</div>
+      <p>Every migration file has a checksum stored in <code>_prisma_migrations</code>. If you edit the file after applying it, the checksum won't match and Prisma throws an error on next <code>migrate deploy</code> — blocking all future migrations. Serious production outage risk.</p>
+    </div>
+  </div>
+
+  <!-- ── SHADOW DB ── -->
+  <div class="section">
+    <div class="section-label">03</div>
+    <h2>Shadow database</h2>
+
+    <p>When you run <code>migrate dev</code>, Prisma needs to calculate what SQL to generate. It does this using a shadow database — a temporary clean database it creates and destroys automatically.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><span class="code-label">how it works</span></div>
+      <pre>Your schema.prisma (new state)
+        ↓
+Shadow DB (clean slate — Prisma creates + drops automatically)
+Prisma replays ALL existing migrations on it → gets "before" state
+        ↓
+Diff: shadow DB state vs your current schema.prisma
+        ↓
+New migration SQL file generated from the diff</pre>
+    </div>
+
+    <p>You never interact with the shadow database directly. It's why <code>migrate dev</code> needs two DB connections — one for your actual DB, one for the shadow.</p>
+
+    <div class="callout tip">
+      <div class="callout-label">Interview answer — shadow DB</div>
+      <p>Shadow DB is a temporary clean database Prisma creates and destroys automatically. It replays all existing migrations to get the "before" state, then diffs that against your current schema to generate the new migration SQL. You never touch it directly.</p>
+    </div>
+  </div>
+
+  <!-- ── EXPAND CONTRACT ── -->
+  <div class="section">
+    <div class="section-label">04</div>
+    <h2>Zero-downtime migrations — expand-contract</h2>
+
+    <p>The most important migration pattern for fintech interviews. Renaming a column directly locks the table and breaks running code.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">sql</span><span class="code-label danger">dangerous — never do this in production</span></div>
+      <pre><span class="cm">-- Locks table + breaks any code still using "fullName"</span>
+<span class="bad">ALTER TABLE "User" RENAME COLUMN "fullName" TO "name";</span></pre>
+    </div>
+
+    <p>The safe approach — two migrations + two code deployments:</p>
+
+    <div class="expand-contract">
+      <div class="ec-phase">
+        <div class="ec-phase-header">
+          <span class="ec-badge expand">Phase 1 — Expand</span>
+          <h4>Add new column alongside old</h4>
+        </div>
+        <p>Migration: add <code>name</code> column, backfill from <code>fullName</code>. Deploy code that writes to BOTH columns simultaneously.</p>
+      </div>
+      <div class="ec-phase">
+        <div class="ec-phase-header">
+          <span class="ec-badge contract">Phase 2 — Contract</span>
+          <h4>Remove old column</h4>
+        </div>
+        <p>Deploy code that only uses <code>name</code>. Then migration: drop <code>fullName</code>. Never drop before updating code — old instances will break immediately.</p>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">prisma</span><span class="code-label good">two migrations in Prisma</span></div>
+      <pre><span class="cm">// Migration 1 schema — add new alongside old</span>
+<span class="kw">model</span> <span class="type">User</span> {
+  fullName <span class="type">String</span><span class="kw">?</span>   <span class="cm">// keep old column</span>
+  name     <span class="type">String</span><span class="kw">?</span>   <span class="cm">// add new column</span>
+}
+
+<span class="cm">// Migration 2 schema — remove old column</span>
+<span class="kw">model</span> <span class="type">User</span> {
+  name <span class="type">String</span>   <span class="cm">// only new column remains</span>
+}</pre>
+    </div>
+
+    <div class="callout interview">
+      <div class="callout-label">Interview answer — rename column with zero downtime</div>
+      <p>Use expand-contract: Migration 1 adds the new column and backfills data, deploy code that writes to both. Migration 2 drops the old column after code no longer references it. Never rename directly — it locks the table and breaks running instances.</p>
+    </div>
+  </div>
+
+  <!-- ── FAILED MIGRATIONS ── -->
+  <div class="section">
+    <div class="section-label">05</div>
+    <h2>Fixing failed migrations</h2>
+
+    <p>A migration fails halfway through in production — Prisma marks it failed in <code>_prisma_migrations</code> and blocks all future migrations until resolved.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><span class="code-label">what you see</span></div>
+      <pre>Error: P3009
+migrate found failed migrations in the target database.
+Migration 20250410_add_name_column failed.
+
+<span class="cm"># All future migrations blocked until resolved</span></pre>
+    </div>
+
+    <div class="recovery-flow">
+      <div class="recovery-step">
+        <div class="recovery-num">1</div>
+        <div class="recovery-body">
+          <h4>Check status</h4>
+          <p>npx prisma migrate status</p>
+        </div>
+      </div>
+      <div class="recovery-step">
+        <div class="recovery-num">2</div>
+        <div class="recovery-body">
+          <h4>Connect to DB and assess partial state</h4>
+          <p>What was applied? What wasn't? Is data in a safe state?</p>
+        </div>
+      </div>
+      <div class="recovery-step">
+        <div class="recovery-num">3a</div>
+        <div class="recovery-body">
+          <h4>If reverting — undo SQL manually + resolve</h4>
+          <p>npx prisma migrate resolve --rolled-back "migration_name"</p>
+        </div>
+      </div>
+      <div class="recovery-step">
+        <div class="recovery-num">3b</div>
+        <div class="recovery-body">
+          <h4>If completing — finish SQL manually + resolve</h4>
+          <p>npx prisma migrate resolve --applied "migration_name"</p>
+        </div>
+      </div>
+      <div class="recovery-step">
+        <div class="recovery-num">4</div>
+        <div class="recovery-body">
+          <h4>Verify clean state</h4>
+          <p>npx prisma migrate status → all migrations should show applied</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout rule">
+      <div class="callout-label">Can you just re-run the migration?</div>
+      <p>Not directly — Prisma blocks re-runs on failed migrations. Most Prisma-generated SQL is not idempotent (<code>ADD COLUMN</code> without <code>IF NOT EXISTS</code> throws on second run). Fix: <code>resolve --rolled-back</code>, edit SQL to be idempotent, create new migration, deploy.</p>
+    </div>
+  </div>
+
+  <!-- ── CONCURRENT INDEX ── -->
+  <div class="section">
+    <div class="section-label">06</div>
+    <h2>Adding indexes without locking — CONCURRENTLY</h2>
+
+    <p>Normal <code>CREATE INDEX</code> takes an <code>AccessExclusiveLock</code> — no reads or writes until done. On a 10M row table this can take minutes, blocking your entire API.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">sql</span><span class="code-label danger">dangerous on large tables</span></div>
+      <pre><span class="bad">CREATE INDEX "User_email_idx" ON "User"("email");</span>
+<span class="cm">-- Table locked — all queries blocked until index builds</span></pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">sql</span><span class="code-label good">safe — no lock</span></div>
+      <pre><span class="good">CREATE INDEX CONCURRENTLY "User_email_idx" ON "User"("email");</span>
+<span class="cm">-- Table stays fully operational while index builds in background</span></pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><span class="code-label">how to do it in Prisma</span></div>
+      <pre><span class="cm"># Step 1 — generate SQL without applying</span>
+npx prisma migrate dev --name add-email-index --create-only
+
+<span class="cm"># Step 2 — edit the generated SQL file</span>
+<span class="cm"># Change: CREATE INDEX → CREATE INDEX CONCURRENTLY</span>
+
+<span class="cm"># Step 3 — apply</span>
+npx prisma migrate dev</pre>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Approach</th><th>Table lock</th><th>Build speed</th><th>In transaction</th><th>Use when</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Normal</td>
+            <td class="bad">Yes — blocks all queries</td>
+            <td class="good">Faster</td>
+            <td class="good">Yes</td>
+            <td class="desc">Small tables, new empty columns</td>
+          </tr>
+          <tr>
+            <td>CONCURRENTLY</td>
+            <td class="good">No lock</td>
+            <td class="bad">2-3x slower</td>
+            <td class="bad">Not allowed</td>
+            <td class="desc">Large tables in production</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">Failed CONCURRENTLY leaves INVALID index</div>
+      <p>If <code>CREATE INDEX CONCURRENTLY</code> fails midway, Postgres leaves a broken index marked as INVALID. You must <code>DROP INDEX CONCURRENTLY</code> the invalid one before retrying. Check with: <code>SELECT indexname FROM pg_indexes WHERE indisvalid = false</code>.</p>
+    </div>
+  </div>
+
+  <!-- ── IDEMPOTENT SQL ── -->
+  <div class="section">
+    <div class="section-label">07</div>
+    <h2>Idempotent SQL — safe to run multiple times</h2>
+
+    <p>Idempotent means: run it once or run it ten times — the end result is always the same. Each line has a guard that says "only act if the work hasn't been done yet."</p>
+
+    <div class="idempotent-grid">
+      <div class="idempotent-card bad">
+        <h4>Not idempotent</h4>
+        <ul>
+          <li>ADD COLUMN "name"</li>
+          <li>UPDATE SET "name" = "fullName"</li>
+          <li>CREATE INDEX "idx"</li>
+        </ul>
+      </div>
+      <div class="idempotent-card good">
+        <h4>Idempotent</h4>
+        <ul>
+          <li>ADD COLUMN IF NOT EXISTS "name"</li>
+          <li>UPDATE SET "name" = "fullName" WHERE "name" IS NULL</li>
+          <li>CREATE INDEX IF NOT EXISTS "idx"</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">sql</span><span class="code-label good">defensive migration — production pattern</span></div>
+      <pre><span class="cm">-- Line 1: add column only if missing</span>
+<span class="good">ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "name" TEXT;</span>
+
+<span class="cm">-- Line 2: backfill only rows not yet migrated</span>
+<span class="good">UPDATE "User" SET "name" = "fullName" WHERE "name" IS NULL;</span>
+
+<span class="cm">-- Line 3: add index without locking, skip if exists</span>
+<span class="good">CREATE INDEX CONCURRENTLY IF NOT EXISTS "User_name_idx" ON "User"("name");</span></pre>
+    </div>
+
+    <p>What each guard does:</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Guard</th><th>Protects against</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>IF NOT EXISTS</td>
+            <td class="desc">Column already created in a partial run — second run skips silently</td>
+          </tr>
+          <tr>
+            <td>WHERE "name" IS NULL</td>
+            <td class="desc">Already-backfilled rows — only fills rows not yet migrated, never overwrites</td>
+          </tr>
+          <tr>
+            <td>CONCURRENTLY IF NOT EXISTS</td>
+            <td class="desc">Index already built in partial run + no table lock on large tables</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── DATA TRACE ── -->
+  <div class="section">
+    <div class="section-label">08</div>
+    <h2>Backfill trace — what actually happens row by row</h2>
+
+    <p>Before migration runs:</p>
+    <table class="data-table">
+      <tr><th>id</th><th>fullName</th><th>name</th></tr>
+      <tr><td>uuid-1</td><td>'Anil Neeli'</td><td class="null">NULL</td></tr>
+      <tr><td>uuid-2</td><td>'User Two'</td><td class="null">NULL</td></tr>
+      <tr><td>uuid-3</td><td>'User Three'</td><td class="null">NULL</td></tr>
+    </table>
+
+    <p style="margin-top:16px">After <code>UPDATE "User" SET "name" = "fullName" WHERE "name" IS NULL</code>:</p>
+    <table class="data-table">
+      <tr><th>id</th><th>fullName</th><th>name</th></tr>
+      <tr><td>uuid-1</td><td>'Anil Neeli'</td><td class="filled">'Anil Neeli'</td></tr>
+      <tr><td>uuid-2</td><td>'User Two'</td><td class="filled">'User Two'</td></tr>
+      <tr><td>uuid-3</td><td>'User Three'</td><td class="filled">'User Three'</td></tr>
+    </table>
+
+    <p style="margin-top:16px">If migration partially failed (uuid-1 and uuid-2 filled, uuid-3 not) — on re-run:</p>
+    <table class="data-table">
+      <tr><th>id</th><th>fullName</th><th>name</th><th>action</th></tr>
+      <tr><td>uuid-1</td><td>'Anil Neeli'</td><td class="filled">'Anil Neeli'</td><td class="skip">skipped — name not null</td></tr>
+      <tr><td>uuid-2</td><td>'User Two'</td><td class="filled">'User Two'</td><td class="skip">skipped — name not null</td></tr>
+      <tr><td>uuid-3</td><td>'User Three'</td><td class="null">NULL</td><td class="filled">filled — name was null</td></tr>
+    </table>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">09</div>
+    <h2>Day 10 summary</h2>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h4>migrate dev</h4>
+        <p>Local only. Generates files, applies, regenerates client, can reset DB on drift.</p>
+      </div>
+      <div class="summary-card">
+        <h4>migrate deploy</h4>
+        <p>Production only. Applies pending migrations in order. Never generates, never resets.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Shadow DB</h4>
+        <p>Temp clean DB Prisma creates/destroys. Replays all migrations to get "before" state for diff.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Expand-contract</h4>
+        <p>Safe column rename pattern. Add new → deploy dual-write code → remove old. Two migrations, two deploys.</p>
+      </div>
+      <div class="summary-card">
+        <h4>migrate resolve</h4>
+        <p>Recovery command for failed migrations. --rolled-back or --applied depending on DB state.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Idempotent SQL</h4>
+        <p>IF NOT EXISTS + WHERE IS NULL guards. Safe to re-run. Write defensively for risky migrations.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Prisma Study Plan · April 2025 · Anil</p>
+  <span class="next-day">Day 11 → Transactions</span>
+</footer>
+
+</body>
+</html>

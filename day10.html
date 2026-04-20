@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prisma Day 11 — Transactions</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Fraunces:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: #2a2a2a;
+    --accent: #5DCAA5;
+    --accent2: #7F77DD;
+    --warn: #EF9F27;
+    --danger: #E24B4A;
+    --blue: #85B7EB;
+    --text: #e8e8e2;
+    --muted: #888880;
+    --faint: #444440;
+    --mono: 'JetBrains Mono', monospace;
+    --serif: 'Fraunces', serif;
+    --sans: 'DM Sans', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.7; }
+
+  header { border-bottom: 1px solid var(--border); padding: 48px 60px 40px; position: relative; overflow: hidden; }
+  header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 300px; height: 300px; background: radial-gradient(circle, rgba(93,202,165,0.07) 0%, transparent 70%); pointer-events: none; }
+  .header-tag { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  header h1 { font-family: var(--serif); font-size: 36px; font-weight: 600; color: #fff; line-height: 1.2; margin-bottom: 8px; }
+  header h1 em { font-style: italic; color: var(--accent); }
+  header p { font-size: 14px; color: var(--muted); max-width: 560px; }
+  .header-meta { display: flex; gap: 24px; margin-top: 24px; flex-wrap: wrap; }
+  .meta-chip { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); padding: 4px 12px; border-radius: 20px; }
+  .meta-chip span { color: var(--text); }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 48px 60px 80px; }
+
+  .section { margin-bottom: 52px; }
+  .section-label { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+  .section h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
+  p { color: var(--text); margin-bottom: 12px; line-height: 1.75; }
+  p:last-child { margin-bottom: 0; }
+
+  .code-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 16px 0; overflow: hidden; }
+  .code-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .code-lang { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .code-label { font-family: var(--mono); font-size: 10px; color: var(--accent); }
+  .code-label.warn { color: var(--warn); }
+  .code-label.danger { color: var(--danger); }
+  pre { padding: 20px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; color: var(--text); }
+  .kw { color: #7F77DD; }
+  .str { color: #5DCAA5; }
+  .cm { color: #555550; font-style: italic; }
+  .dec { color: #EF9F27; }
+  .type { color: #85B7EB; }
+  .num { color: #F0997B; }
+  .fn { color: #e8e8e2; }
+  .good { color: #5DCAA5; }
+  .bad { color: #E24B4A; }
+
+  code { font-family: var(--mono); font-size: 12px; background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--accent); }
+
+  .callout { border-left: 3px solid; border-radius: 0 6px 6px 0; padding: 14px 18px; margin: 16px 0; }
+  .callout-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+  .callout p { margin: 0; font-size: 13px; }
+  .callout.interview { border-color: var(--warn); background: rgba(239,159,39,0.06); }
+  .callout.interview .callout-label { color: var(--warn); }
+  .callout.gotcha { border-color: var(--danger); background: rgba(226,75,74,0.06); }
+  .callout.gotcha .callout-label { color: var(--danger); }
+  .callout.tip { border-color: var(--accent); background: rgba(93,202,165,0.06); }
+  .callout.tip .callout-label { color: var(--accent); }
+  .callout.rule { border-color: var(--accent2); background: rgba(127,119,221,0.06); }
+  .callout.rule .callout-label { color: var(--accent2); }
+
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); padding: 10px 14px; text-align: left; font-weight: 400; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  td.desc { color: var(--muted); font-size: 13px; }
+  td.good { color: var(--accent); font-size: 13px; }
+  td.bad { color: var(--danger); font-size: 13px; }
+
+  .acid-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 16px 0; }
+  .acid-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; text-align: center; }
+  .acid-letter { font-family: var(--serif); font-size: 28px; font-weight: 600; margin-bottom: 4px; }
+  .acid-card:nth-child(1) .acid-letter { color: var(--accent); }
+  .acid-card:nth-child(2) .acid-letter { color: var(--blue); }
+  .acid-card:nth-child(3) .acid-letter { color: var(--accent2); }
+  .acid-card:nth-child(4) .acid-letter { color: var(--warn); }
+  .acid-word { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
+  .acid-desc { font-size: 12px; color: var(--muted); }
+
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .compare-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .compare-card h4 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .compare-card.sequential h4 { color: var(--accent); }
+  .compare-card.interactive h4 { color: var(--accent2); }
+  .compare-card ul { list-style: none; padding: 0; }
+  .compare-card ul li { font-size: 12.5px; color: var(--muted); padding: 4px 0 4px 14px; position: relative; border-bottom: 1px solid var(--faint); }
+  .compare-card ul li:last-child { border-bottom: none; }
+  .compare-card ul li::before { content: '›'; position: absolute; left: 2px; }
+  .compare-card.sequential ul li::before { color: var(--accent); }
+  .compare-card.interactive ul li::before { color: var(--accent2); }
+
+  .isolation-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 16px 0; }
+  .isolation-row { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; display: grid; grid-template-columns: 160px 1fr 1fr 80px; gap: 12px; align-items: center; }
+  .isolation-name { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+  .isolation-row:nth-child(1) .isolation-name { color: var(--danger); }
+  .isolation-row:nth-child(2) .isolation-name { color: var(--warn); }
+  .isolation-row:nth-child(3) .isolation-name { color: var(--blue); }
+  .isolation-row:nth-child(4) .isolation-name { color: var(--accent); }
+  .isolation-prevents { font-size: 12px; color: var(--muted); }
+  .isolation-use { font-size: 12px; color: var(--text); }
+  .isolation-speed { font-family: var(--mono); font-size: 11px; text-align: right; }
+  .isolation-row:nth-child(1) .isolation-speed { color: var(--accent); }
+  .isolation-row:nth-child(2) .isolation-speed { color: var(--accent); }
+  .isolation-row:nth-child(3) .isolation-speed { color: var(--warn); }
+  .isolation-row:nth-child(4) .isolation-speed { color: var(--danger); }
+
+  .retry-trace { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin: 16px 0; }
+  .retry-trace h4 { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
+  .retry-step { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--faint); align-items: flex-start; }
+  .retry-step:last-child { border-bottom: none; }
+  .retry-badge { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
+  .retry-badge.attempt { background: rgba(133,183,235,0.15); color: var(--blue); }
+  .retry-badge.fail { background: rgba(226,75,74,0.15); color: var(--danger); }
+  .retry-badge.wait { background: rgba(239,159,39,0.15); color: var(--warn); }
+  .retry-badge.success { background: rgba(93,202,165,0.15); color: var(--accent); }
+  .retry-text { font-size: 12.5px; color: var(--muted); }
+  .retry-text span { color: var(--text); }
+
+  .kafka-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .kafka-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .kafka-card h4 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .kafka-card.db h4 { color: var(--accent); }
+  .kafka-card.kafka h4 { color: var(--accent2); }
+  .kafka-card ul { list-style: none; padding: 0; }
+  .kafka-card ul li { font-size: 12.5px; color: var(--muted); padding: 4px 0 4px 14px; position: relative; border-bottom: 1px solid var(--faint); }
+  .kafka-card ul li:last-child { border-bottom: none; }
+  .kafka-card ul li::before { content: '›'; position: absolute; left: 2px; }
+  .kafka-card.db ul li::before { color: var(--accent); }
+  .kafka-card.kafka ul li::before { color: var(--accent2); }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; border-top: 2px solid var(--accent); }
+  .summary-card h4 { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .summary-card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  footer { border-top: 1px solid var(--border); padding: 24px 60px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  footer p { font-family: var(--mono); font-size: 11px; color: var(--faint); margin: 0; }
+  .next-day { font-family: var(--mono); font-size: 11px; color: var(--accent); background: rgba(93,202,165,0.08); border: 1px solid rgba(93,202,165,0.2); padding: 6px 14px; border-radius: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">Prisma Study Plan · April 2025</div>
+  <h1>Day 11 — <em>Transactions</em></h1>
+  <p>ACID · $transaction styles · isolation levels · idempotency · retry logic · DB retry vs Kafka retry</p>
+  <div class="header-meta">
+    <div class="meta-chip">Phase <span>3 of 5</span></div>
+    <div class="meta-chip">Date <span>Tue Apr 15</span></div>
+    <div class="meta-chip">Stack <span>Prisma 5 · TS · Neon</span></div>
+    <div class="meta-chip">Status <span style="color:#5DCAA5">✓ Complete</span></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── WHAT IS A TRANSACTION ── -->
+  <div class="section">
+    <div class="section-label">01</div>
+    <h2>What is a transaction?</h2>
+
+    <p>A group of database operations that either <strong>all succeed</strong> or <strong>all fail together</strong>. No partial state.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">example</span><span class="code-label danger">without transaction — partial state</span></div>
+      <pre><span class="bad">Debit  ₹1000 from Account A  → success</span>
+<span class="bad">Credit ₹1000 to Account B    → fails</span>
+<span class="cm">// Account A lost ₹1000. Account B never received it.</span>
+<span class="cm">// Money disappeared. Catastrophic.</span></pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">example</span><span class="code-label good">with transaction — atomic</span></div>
+      <pre><span class="good">Debit  ₹1000 from Account A  → success</span>
+<span class="bad">Credit ₹1000 to Account B    → fails</span>
+<span class="cm">// Transaction rolls back — Account A debit is reversed</span>
+<span class="cm">// Both operations cancelled. No money lost.</span></pre>
+    </div>
+  </div>
+
+  <!-- ── ACID ── -->
+  <div class="section">
+    <div class="section-label">02</div>
+    <h2>ACID properties</h2>
+
+    <div class="acid-grid">
+      <div class="acid-card">
+        <div class="acid-letter">A</div>
+        <div class="acid-word">Atomicity</div>
+        <div class="acid-desc">All succeed or all fail — no partial state</div>
+      </div>
+      <div class="acid-card">
+        <div class="acid-letter">C</div>
+        <div class="acid-word">Consistency</div>
+        <div class="acid-desc">DB moves from one valid state to another</div>
+      </div>
+      <div class="acid-card">
+        <div class="acid-letter">I</div>
+        <div class="acid-word">Isolation</div>
+        <div class="acid-desc">Concurrent transactions don't interfere</div>
+      </div>
+      <div class="acid-card">
+        <div class="acid-letter">D</div>
+        <div class="acid-word">Durability</div>
+        <div class="acid-desc">Once committed, data survives crashes</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TWO STYLES ── -->
+  <div class="section">
+    <div class="section-label">03</div>
+    <h2>Two transaction styles in Prisma</h2>
+
+    <div class="compare-grid">
+      <div class="compare-card sequential">
+        <h4>$transaction([]) — sequential array</h4>
+        <ul>
+          <li>Operations defined upfront as array</li>
+          <li>Simple syntax</li>
+          <li>Can't read then conditionally write</li>
+          <li>Results of op 1 not available for op 2</li>
+          <li>Use for simple parallel operations</li>
+        </ul>
+      </div>
+      <div class="compare-card interactive">
+        <h4>$transaction(callback) — interactive</h4>
+        <ul>
+          <li>Full async function with tx client</li>
+          <li>Can read → validate → write</li>
+          <li>Throwing any error rolls back all</li>
+          <li>Holds DB connection longer</li>
+          <li>Use for complex business logic</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">sequential array — simple ops</span></div>
+      <pre><span class="kw">const</span> [debit, credit] = <span class="kw">await</span> prisma.<span class="fn">$transaction</span>([
+  prisma.account.<span class="fn">update</span>({
+    where: { id: <span class="str">'account-a'</span> },
+    data: { balance: { decrement: <span class="num">1000</span> } }
+  }),
+  prisma.account.<span class="fn">update</span>({
+    where: { id: <span class="str">'account-b'</span> },
+    data: { balance: { increment: <span class="num">1000</span> } }
+  })
+])</pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">interactive callback — read then write</span></div>
+      <pre><span class="kw">const</span> result = <span class="kw">await</span> prisma.<span class="fn">$transaction</span>(<span class="kw">async</span> (tx) => {
+  <span class="cm">// Step 1 — read current balance</span>
+  <span class="kw">const</span> accountA = <span class="kw">await</span> tx.account.<span class="fn">findUnique</span>({
+    where: { id: <span class="str">'account-a'</span> }
+  })
+
+  <span class="cm">// Step 2 — validate before writing</span>
+  <span class="kw">if</span> (accountA.balance < <span class="num">1000</span>) {
+    <span class="kw">throw new</span> <span class="type">Error</span>(<span class="str">'Insufficient funds'</span>)  <span class="cm">// rolls back everything</span>
+  }
+
+  <span class="cm">// Step 3 — debit + credit + audit log</span>
+  <span class="kw">await</span> tx.account.<span class="fn">update</span>({
+    where: { id: <span class="str">'account-a'</span> },
+    data: { balance: { decrement: <span class="num">1000</span> } }
+  })
+  <span class="kw">await</span> tx.account.<span class="fn">update</span>({
+    where: { id: <span class="str">'account-b'</span> },
+    data: { balance: { increment: <span class="num">1000</span> } }
+  })
+  <span class="kw">await</span> tx.auditLog.<span class="fn">create</span>({
+    data: { action: <span class="str">'TRANSFER'</span>, amount: <span class="num">1000</span> }
+  })
+}, {
+  isolationLevel: <span class="type">Prisma</span>.<span class="type">TransactionIsolationLevel</span>.Serializable,
+  maxWait: <span class="num">5000</span>,
+  timeout: <span class="num">10000</span>
+})</pre>
+    </div>
+
+    <div class="callout interview">
+      <div class="callout-label">Interview question — most common</div>
+      <p>"Difference between $transaction([]) and interactive transaction?" — Array style is sequential but can't read then conditionally write. Interactive callback can read, validate, then write — but holds a DB connection longer. Use interactive for complex business logic like payments.</p>
+    </div>
+  </div>
+
+  <!-- ── ISOLATION LEVELS ── -->
+  <div class="section">
+    <div class="section-label">04</div>
+    <h2>Isolation levels</h2>
+
+    <p>Controls how much concurrent transactions can see each other's work. Three problems they prevent:</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Problem</th><th>What happens</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Dirty read</td>
+            <td class="desc">Reading data another transaction wrote but hasn't committed yet — could be rolled back</td>
+          </tr>
+          <tr>
+            <td>Non-repeatable read</td>
+            <td class="desc">Reading same row twice in one transaction, getting different values — another tx committed a change in between</td>
+          </tr>
+          <tr>
+            <td>Phantom read</td>
+            <td class="desc">Running same query twice, getting different rows — another tx inserted/deleted rows in between</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="isolation-grid">
+      <div class="isolation-row">
+        <div class="isolation-name">ReadUncommitted</div>
+        <div class="isolation-prevents">Prevents nothing — dirty reads possible</div>
+        <div class="isolation-use">Never use in production</div>
+        <div class="isolation-speed">fastest</div>
+      </div>
+      <div class="isolation-row">
+        <div class="isolation-name">ReadCommitted</div>
+        <div class="isolation-prevents">Prevents dirty reads only</div>
+        <div class="isolation-use">Postgres default — dashboards, reports</div>
+        <div class="isolation-speed">fast</div>
+      </div>
+      <div class="isolation-row">
+        <div class="isolation-name">RepeatableRead</div>
+        <div class="isolation-prevents">Prevents dirty + non-repeatable reads</div>
+        <div class="isolation-use">Inventory checks, read-heavy logic</div>
+        <div class="isolation-speed">slower</div>
+      </div>
+      <div class="isolation-row">
+        <div class="isolation-name">Serializable</div>
+        <div class="isolation-prevents">Prevents all anomalies — full isolation</div>
+        <div class="isolation-use">Money transfers, payments — fintech critical</div>
+        <div class="isolation-speed">slowest</div>
+      </div>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">Why ReadCommitted fails for transfers</div>
+      <p>Two concurrent transactions both read ₹1000 balance. Both think there's enough. Both debit ₹800. Account goes from ₹1000 to ₹200 instead of being rejected on the second debit. ReadCommitted doesn't prevent this — Serializable does.</p>
+    </div>
+
+    <div class="callout rule">
+      <div class="callout-label">How Serializable works</div>
+      <p>Postgres tracks which rows each transaction read and wrote. Before committing, it checks: "if these ran sequentially, would the result be the same?" If no → aborts one with P2034. You don't write this check — Postgres handles it automatically. Your job is just to catch P2034 and retry.</p>
+    </div>
+
+    <div class="callout interview">
+      <div class="callout-label">Interview answer</div>
+      <p>"Which isolation level for financial transactions?" — Serializable. It ensures transactions run as if sequential, preventing double-spend where two concurrent transfers both read the same balance and both succeed when only one should. Tradeoff: occasional P2034 errors handled with retry + exponential backoff.</p>
+    </div>
+  </div>
+
+  <!-- ── IDEMPOTENCY ── -->
+  <div class="section">
+    <div class="section-label">05</div>
+    <h2>Idempotency — prevent double charge</h2>
+
+    <p>Without idempotency — a network retry sends the transfer request twice and the user gets charged twice. The idempotency key is a unique ID per request that ensures the same operation never runs more than once.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">idempotent transfer function</span></div>
+      <pre><span class="kw">async function</span> <span class="fn">transfer</span>(params: {
+  fromAccountId: <span class="type">string</span>
+  toAccountId: <span class="type">string</span>
+  amount: <span class="type">number</span>
+  idempotencyKey: <span class="type">string</span>  <span class="cm">// unique UUID per request from client</span>
+}) {
+  <span class="kw">return await</span> prisma.<span class="fn">$transaction</span>(<span class="kw">async</span> (tx) => {
+
+    <span class="cm">// Check if already processed</span>
+    <span class="kw">const</span> existing = <span class="kw">await</span> tx.transaction.<span class="fn">findUnique</span>({
+      where: { idempotencyKey: params.idempotencyKey }
+    })
+    <span class="kw">if</span> (existing) <span class="kw">return</span> existing  <span class="cm">// already done — return same result</span>
+
+    <span class="cm">// Validate balance</span>
+    <span class="kw">const</span> account = <span class="kw">await</span> tx.account.<span class="fn">findUnique</span>({
+      where: { id: params.fromAccountId }
+    })
+    <span class="kw">if</span> (account.balance < params.amount) {
+      <span class="kw">throw new</span> <span class="type">Error</span>(<span class="str">'Insufficient funds'</span>)
+    }
+
+    <span class="cm">// Debit + Credit</span>
+    <span class="kw">await</span> tx.account.<span class="fn">update</span>({
+      where: { id: params.fromAccountId },
+      data: { balance: { decrement: params.amount } }
+    })
+    <span class="kw">await</span> tx.account.<span class="fn">update</span>({
+      where: { id: params.toAccountId },
+      data: { balance: { increment: params.amount } }
+    })
+
+    <span class="cm">// Record with idempotency key</span>
+    <span class="kw">return await</span> tx.transaction.<span class="fn">create</span>({
+      data: {
+        idempotencyKey: params.idempotencyKey,
+        fromAccountId: params.fromAccountId,
+        toAccountId: params.toAccountId,
+        amount: params.amount,
+        status: <span class="str">'COMPLETED'</span>
+      }
+    })
+  }, { isolationLevel: <span class="type">Prisma</span>.<span class="type">TransactionIsolationLevel</span>.Serializable })
+}</pre>
+    </div>
+  </div>
+
+  <!-- ── RETRY LOGIC ── -->
+  <div class="section">
+    <div class="section-label">06</div>
+    <h2>Retry logic — handling P2034</h2>
+
+    <p>At Serializable isolation, concurrent transactions can conflict and throw P2034. You need retry logic with exponential backoff.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">retry with exponential backoff</span></div>
+      <pre><span class="kw">async function</span> <span class="fn">withRetry</span>&lt;<span class="type">T</span>&gt;(
+  fn: () => <span class="type">Promise</span>&lt;<span class="type">T</span>&gt;,
+  retries = <span class="num">3</span>
+): <span class="type">Promise</span>&lt;<span class="type">T</span>&gt; {
+  <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i < retries; i++) {
+    <span class="kw">try</span> {
+      <span class="kw">return await</span> <span class="fn">fn</span>()              <span class="cm">// attempt the operation</span>
+    } <span class="kw">catch</span> (error) {
+      <span class="kw">if</span> (error.code === <span class="str">'P2034'</span> && i < retries - <span class="num">1</span>) {
+        <span class="cm">// Serialization conflict — wait then retry</span>
+        <span class="kw">await new</span> <span class="type">Promise</span>(resolve =>
+          <span class="fn">setTimeout</span>(resolve, <span class="num">50</span> * (i + <span class="num">1</span>))  <span class="cm">// 50ms, 100ms, 150ms</span>
+        )
+        <span class="kw">continue</span>
+      }
+      <span class="kw">throw</span> error  <span class="cm">// not P2034 or max retries — bubble up</span>
+    }
+  }
+  <span class="kw">throw new</span> <span class="type">Error</span>(<span class="str">'Max retries exceeded'</span>)
+}
+
+<span class="cm">// Usage — fn is the entire transfer function</span>
+<span class="kw">const</span> result = <span class="kw">await</span> <span class="fn">withRetry</span>(() => <span class="fn">transfer</span>({
+  fromAccountId: <span class="str">'account-a'</span>,
+  toAccountId: <span class="str">'account-b'</span>,
+  amount: <span class="num">1000</span>,
+  idempotencyKey: <span class="str">'unique-request-uuid'</span>
+}))</pre>
+    </div>
+
+    <div class="retry-trace">
+      <h4>Retry flow trace</h4>
+      <div class="retry-step">
+        <span class="retry-badge attempt">i = 0</span>
+        <span class="retry-text">try → run fn() → <span>Postgres detects conflict → throws P2034</span></span>
+      </div>
+      <div class="retry-step">
+        <span class="retry-badge wait">wait</span>
+        <span class="retry-text">catch → P2034 → <span>wait 50ms (50 × 1)</span> → continue</span>
+      </div>
+      <div class="retry-step">
+        <span class="retry-badge attempt">i = 1</span>
+        <span class="retry-text">try → run fn() → <span>Postgres detects conflict → throws P2034</span></span>
+      </div>
+      <div class="retry-step">
+        <span class="retry-badge wait">wait</span>
+        <span class="retry-text">catch → P2034 → <span>wait 100ms (50 × 2)</span> → continue</span>
+      </div>
+      <div class="retry-step">
+        <span class="retry-badge attempt">i = 2</span>
+        <span class="retry-text">try → run fn() → <span>success → return result</span></span>
+      </div>
+      <div class="retry-step">
+        <span class="retry-badge success">done</span>
+        <span class="retry-text"><span>Each retry runs entire function from scratch</span> — fresh read, fresh validate, fresh write</span>
+      </div>
+    </div>
+
+    <div class="callout rule">
+      <div class="callout-label">Why idempotency key + retry are both needed</div>
+      <p>Retry alone → double charge if attempt 1 committed but network dropped before response. Idempotency alone → doesn't handle P2034 conflicts. Together → retry handles DB conflicts, idempotency key prevents double charge on network retries.</p>
+    </div>
+  </div>
+
+  <!-- ── DB RETRY VS KAFKA ── -->
+  <div class="section">
+    <div class="section-label">07</div>
+    <h2>DB retry vs Kafka retry</h2>
+
+    <div class="kafka-compare">
+      <div class="kafka-card db">
+        <h4>DB retry (P2034)</h4>
+        <ul>
+          <li>Conflict between concurrent DB transactions</li>
+          <li>Nothing committed yet</li>
+          <li>Retry is immediate — milliseconds</li>
+          <li>Same operation, different timing</li>
+          <li>You're trying to make it happen</li>
+        </ul>
+      </div>
+      <div class="kafka-card kafka">
+        <h4>Kafka retry</h4>
+        <ul>
+          <li>Async job failed after commit</li>
+          <li>Transaction already in DB</li>
+          <li>Retry can be minutes/hours later</li>
+          <li>Side effects: SMS, webhook, fraud check</li>
+          <li>It happened — you're retrying what follows</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">combined pattern in production</span></div>
+      <pre><span class="kw">async function</span> <span class="fn">transfer</span>(params) {
+  <span class="cm">// Step 1 — DB transaction with retry (handles P2034)</span>
+  <span class="kw">const</span> transaction = <span class="kw">await</span> <span class="fn">withRetry</span>(() =>
+    prisma.<span class="fn">$transaction</span>(<span class="kw">async</span> (tx) => {
+      <span class="cm">// validate + debit + credit + record</span>
+    }, { isolationLevel: <span class="type">Prisma</span>.<span class="type">TransactionIsolationLevel</span>.Serializable })
+  )
+
+  <span class="cm">// Step 2 — publish event AFTER successful commit</span>
+  <span class="kw">await</span> kafka.<span class="fn">produce</span>(<span class="str">'transfer.completed'</span>, {
+    transactionId: transaction.id,
+    fromAccountId: params.fromAccountId,
+    toAccountId: params.toAccountId,
+    amount: params.amount
+  })
+  <span class="cm">// Kafka consumers retry SMS, webhook, fraud check independently</span>
+
+  <span class="kw">return</span> transaction
+}</pre>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">One line summary</div>
+      <p>DB retry = fix the write before it commits. Kafka retry = fix the side effect after it committed. Two different stages of the same request lifecycle.</p>
+    </div>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">08</div>
+    <h2>Day 11 summary</h2>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h4>ACID</h4>
+        <p>Atomicity, Consistency, Isolation, Durability. All succeed or all fail — no partial state.</p>
+      </div>
+      <div class="summary-card">
+        <h4>$transaction([])</h4>
+        <p>Array of ops defined upfront. Simple. Can't read then conditionally write.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Interactive tx</h4>
+        <p>Async callback with tx client. Read → validate → write. Throws = full rollback.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Serializable</h4>
+        <p>Postgres detects conflicts automatically. Your job: catch P2034 and retry. Not a manual check.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Idempotency key</h4>
+        <p>Unique UUID per request. Check before processing — return existing if found. Prevents double charge.</p>
+      </div>
+      <div class="summary-card">
+        <h4>DB vs Kafka retry</h4>
+        <p>DB retry: fix write before commit. Kafka retry: fix side effect after commit. Different stages.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Prisma Study Plan · April 2025 · Anil</p>
+  <span class="next-day">Day 12 → Raw SQL + when to escape Prisma</span>
+</footer>
+
+</body>
+</html>

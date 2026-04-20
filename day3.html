@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prisma Day 3 — CRUD + Typed Client</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Fraunces:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: #2a2a2a;
+    --accent: #5DCAA5;
+    --accent2: #7F77DD;
+    --warn: #EF9F27;
+    --danger: #E24B4A;
+    --blue: #85B7EB;
+    --text: #e8e8e2;
+    --muted: #888880;
+    --faint: #444440;
+    --mono: 'JetBrains Mono', monospace;
+    --serif: 'Fraunces', serif;
+    --sans: 'DM Sans', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.7; }
+
+  header { border-bottom: 1px solid var(--border); padding: 48px 60px 40px; position: relative; overflow: hidden; }
+  header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 300px; height: 300px; background: radial-gradient(circle, rgba(93,202,165,0.07) 0%, transparent 70%); pointer-events: none; }
+  .header-tag { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  header h1 { font-family: var(--serif); font-size: 36px; font-weight: 600; color: #fff; line-height: 1.2; margin-bottom: 8px; }
+  header h1 em { font-style: italic; color: var(--accent); }
+  header p { font-size: 14px; color: var(--muted); max-width: 560px; }
+  .header-meta { display: flex; gap: 24px; margin-top: 24px; flex-wrap: wrap; }
+  .meta-chip { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); padding: 4px 12px; border-radius: 20px; }
+  .meta-chip span { color: var(--text); }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 48px 60px 80px; }
+
+  .section { margin-bottom: 52px; }
+  .section-label { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+  .section h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
+  p { color: var(--text); margin-bottom: 12px; line-height: 1.75; }
+  p:last-child { margin-bottom: 0; }
+
+  .code-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 16px 0; overflow: hidden; }
+  .code-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .code-lang { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .code-label { font-family: var(--mono); font-size: 10px; color: var(--accent); }
+  pre { padding: 20px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; color: var(--text); }
+  .kw { color: #7F77DD; }
+  .str { color: #5DCAA5; }
+  .cm { color: #555550; font-style: italic; }
+  .dec { color: #EF9F27; }
+  .type { color: #85B7EB; }
+  .num { color: #F0997B; }
+  .fn { color: #e8e8e2; }
+  .prop { color: #D4537E; }
+
+  code { font-family: var(--mono); font-size: 12px; background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--accent); }
+
+  .callout { border-left: 3px solid; border-radius: 0 6px 6px 0; padding: 14px 18px; margin: 16px 0; }
+  .callout-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+  .callout p { margin: 0; font-size: 13px; }
+  .callout.interview { border-color: var(--warn); background: rgba(239,159,39,0.06); }
+  .callout.interview .callout-label { color: var(--warn); }
+  .callout.gotcha { border-color: var(--danger); background: rgba(226,75,74,0.06); }
+  .callout.gotcha .callout-label { color: var(--danger); }
+  .callout.tip { border-color: var(--accent); background: rgba(93,202,165,0.06); }
+  .callout.tip .callout-label { color: var(--accent); }
+  .callout.rule { border-color: var(--accent2); background: rgba(127,119,221,0.06); }
+  .callout.rule .callout-label { color: var(--accent2); }
+
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); padding: 10px 14px; text-align: left; font-weight: 400; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  td.desc { color: var(--muted); font-size: 13px; }
+
+  .op-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin: 16px 0; }
+  .op-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; border-left: 3px solid; }
+  .op-card.create { border-left-color: #5DCAA5; }
+  .op-card.read { border-left-color: #85B7EB; }
+  .op-card.update { border-left-color: #EF9F27; }
+  .op-card.delete { border-left-color: #E24B4A; }
+  .op-card h4 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .op-card.create h4 { color: #5DCAA5; }
+  .op-card.read h4 { color: #85B7EB; }
+  .op-card.update h4 { color: #EF9F27; }
+  .op-card.delete h4 { color: #E24B4A; }
+  .op-card ul { list-style: none; padding: 0; }
+  .op-card ul li { font-family: var(--mono); font-size: 12px; color: var(--muted); padding: 3px 0; border-bottom: 1px solid var(--faint); }
+  .op-card ul li:last-child { border-bottom: none; }
+  .op-card ul li span { color: var(--text); }
+
+  .type-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 16px 0; }
+  .type-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .type-card h4 { font-family: var(--mono); font-size: 11px; color: var(--accent2); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .type-card p { font-size: 12px; color: var(--muted); margin: 0; }
+
+  .error-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin: 10px 0; display: flex; gap: 16px; align-items: flex-start; }
+  .error-code { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--danger); background: rgba(226,75,74,0.1); padding: 6px 12px; border-radius: 6px; white-space: nowrap; }
+  .error-body h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .error-body p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  .validation-flow { display: flex; align-items: center; gap: 0; margin: 16px 0; flex-wrap: wrap; }
+  .flow-step { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 16px; font-size: 12px; }
+  .flow-step .label { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 3px; }
+  .flow-step.joi .label { color: var(--warn); }
+  .flow-step.prisma .label { color: var(--accent2); }
+  .flow-step.db .label { color: var(--accent); }
+  .flow-step p { font-size: 11.5px; color: var(--muted); margin: 0; }
+  .flow-arrow { font-family: var(--mono); color: var(--faint); padding: 0 8px; font-size: 16px; }
+
+  .mistakes-list { list-style: none; padding: 0; }
+  .mistakes-list li { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); align-items: flex-start; }
+  .mistakes-list li:last-child { border-bottom: none; }
+  .mistake-num { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--danger); background: rgba(226,75,74,0.1); width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .mistake-body h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .mistake-body p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; border-top: 2px solid var(--accent); }
+  .summary-card h4 { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .summary-card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  footer { border-top: 1px solid var(--border); padding: 24px 60px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  footer p { font-family: var(--mono); font-size: 11px; color: var(--faint); margin: 0; }
+  .next-day { font-family: var(--mono); font-size: 11px; color: var(--accent); background: rgba(93,202,165,0.08); border: 1px solid rgba(93,202,165,0.2); padding: 6px 14px; border-radius: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">Prisma Study Plan · April 2025</div>
+  <h1>Day 3 — <em>CRUD + Typed Client</em></h1>
+  <p>create · find · update · delete · Prisma input types · error handling · validation layers</p>
+  <div class="header-meta">
+    <div class="meta-chip">Phase <span>1 of 5</span></div>
+    <div class="meta-chip">Date <span>Thu Apr 3</span></div>
+    <div class="meta-chip">Stack <span>Prisma 5 · TS · Neon</span></div>
+    <div class="meta-chip">Status <span style="color:#5DCAA5">✓ Complete</span></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── CRUD OVERVIEW ── -->
+  <div class="section">
+    <div class="section-label">01</div>
+    <h2>CRUD operations — overview</h2>
+
+    <div class="op-grid">
+      <div class="op-card create">
+        <h4>Create</h4>
+        <ul>
+          <li><span>create()</span> — single record</li>
+          <li><span>createMany()</span> — bulk insert</li>
+        </ul>
+      </div>
+      <div class="op-card read">
+        <h4>Read</h4>
+        <ul>
+          <li><span>findUnique()</span> — by @id or @unique</li>
+          <li><span>findFirst()</span> — first match, any field</li>
+          <li><span>findMany()</span> — all matches</li>
+        </ul>
+      </div>
+      <div class="op-card update">
+        <h4>Update</h4>
+        <ul>
+          <li><span>update()</span> — single by unique</li>
+          <li><span>updateMany()</span> — multiple, returns count</li>
+          <li><span>upsert()</span> — create or update</li>
+        </ul>
+      </div>
+      <div class="op-card delete">
+        <h4>Delete</h4>
+        <ul>
+          <li><span>delete()</span> — single by unique</li>
+          <li><span>deleteMany()</span> — multiple, returns count</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout rule">
+      <div class="callout-label">The key rule</div>
+      <p><code>findUnique</code> / <code>update</code> / <code>delete</code> — where needs <code>@id</code> or <code>@unique</code> field. <code>findMany</code> / <code>updateMany</code> / <code>deleteMany</code> — where can use any field.</p>
+    </div>
+  </div>
+
+  <!-- ── CREATE ── -->
+  <div class="section">
+    <div class="section-label">02</div>
+    <h2>Create operations</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">create + createMany</span></div>
+      <pre><span class="cm">// Single create — returns the created record</span>
+<span class="kw">const</span> user = <span class="kw">await</span> prisma.user.<span class="fn">create</span>({
+  data: { email: <span class="str">'anil@test.com'</span>, name: <span class="str">'Anil'</span> }
+})
+<span class="cm">// user.id is auto-generated uuid — accessible immediately</span>
+
+<span class="cm">// Nested create — User + Post in one query</span>
+<span class="kw">await</span> prisma.user.<span class="fn">create</span>({
+  data: {
+    email: <span class="str">'test2@test.com'</span>,
+    name: <span class="str">'Test'</span>,
+    posts: {
+      create: { title: <span class="str">'My first post'</span>, content: <span class="str">'Hello'</span> }
+    }
+  }
+})
+
+<span class="cm">// Fetch with include after creation</span>
+<span class="kw">const</span> userWithPost = <span class="kw">await</span> prisma.user.<span class="fn">findUnique</span>({
+  where: { email: <span class="str">'test2@test.com'</span> },
+  include: { posts: <span class="kw">true</span> }
+})
+
+<span class="cm">// createMany — bulk insert, no nested relations allowed</span>
+<span class="kw">await</span> prisma.tag.<span class="fn">createMany</span>({
+  data: [
+    { name: <span class="str">'typescript'</span> },
+    { name: <span class="str">'prisma'</span> },
+    { name: <span class="str">'nodejs'</span> },
+  ],
+  skipDuplicates: <span class="kw">true</span>  <span class="cm">// don't throw if already exists</span>
+})</pre>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">createMany limitation</div>
+      <p><code>createMany</code> does not support nested relations — you can't create related records in the same call. It's for bulk inserting flat data only. Also doesn't return the created records, just a count.</p>
+    </div>
+  </div>
+
+  <!-- ── READ ── -->
+  <div class="section">
+    <div class="section-label">03</div>
+    <h2>Read operations</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">findUnique · findFirst · findMany</span></div>
+      <pre><span class="cm">// findUnique — only @id or @unique fields in where</span>
+<span class="cm">// Returns: Post | null</span>
+<span class="kw">const</span> user = <span class="kw">await</span> prisma.user.<span class="fn">findUnique</span>({
+  where: { email: <span class="str">'anil@test.com'</span> }  <span class="cm">// email is @unique ✓</span>
+})
+
+<span class="cm">// findFirst — first match on any field, with ordering</span>
+<span class="cm">// Returns: Post | null</span>
+<span class="kw">const</span> latestPost = <span class="kw">await</span> prisma.post.<span class="fn">findFirst</span>({
+  where: { published: <span class="kw">true</span> },
+  orderBy: { createdAt: <span class="str">'desc'</span> }
+})
+
+<span class="cm">// findMany — all matching records</span>
+<span class="cm">// Returns: Post[]</span>
+<span class="kw">const</span> posts = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+  where: { published: <span class="kw">true</span> },
+  orderBy: { createdAt: <span class="str">'desc'</span> },
+  take: <span class="num">10</span>,   <span class="cm">// limit results</span>
+  skip: <span class="num">0</span>,    <span class="cm">// offset — for pagination</span>
+})</pre>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Method</th><th>Where clause</th><th>Returns</th><th>Use when</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>findUnique</td>
+            <td class="desc">@id or @unique only</td>
+            <td class="desc">T | null</td>
+            <td class="desc">Fetching one record by ID or email</td>
+          </tr>
+          <tr>
+            <td>findFirst</td>
+            <td class="desc">Any field</td>
+            <td class="desc">T | null</td>
+            <td class="desc">First match with ordering — latest post, oldest invoice</td>
+          </tr>
+          <tr>
+            <td>findMany</td>
+            <td class="desc">Any field</td>
+            <td class="desc">T[]</td>
+            <td class="desc">All matches — lists, feeds, reports</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout interview">
+      <div class="callout-label">Interview question</div>
+      <p>"What's the difference between <code>findUnique</code> and <code>findFirst</code>?" — <code>findUnique</code> only works on <code>@id</code> or <code>@unique</code> fields and Postgres can use an index lookup. <code>findFirst</code> works on any field but may do a full table scan. Use <code>findUnique</code> whenever you have a unique identifier.</p>
+    </div>
+  </div>
+
+  <!-- ── UPDATE ── -->
+  <div class="section">
+    <div class="section-label">04</div>
+    <h2>Update operations</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">update · updateMany · upsert</span></div>
+      <pre><span class="cm">// update — requires @id or @unique in where</span>
+<span class="cm">// Throws P2025 if record not found</span>
+<span class="kw">const</span> updated = <span class="kw">await</span> prisma.post.<span class="fn">update</span>({
+  where: { id: <span class="str">'post-123'</span> },
+  data: { published: <span class="kw">true</span> }
+})
+
+<span class="cm">// updateMany — any field in where, returns count</span>
+<span class="cm">// Does NOT throw if nothing found — returns { count: 0 }</span>
+<span class="kw">const</span> { count } = <span class="kw">await</span> prisma.post.<span class="fn">updateMany</span>({
+  where: { userId: user.id },
+  data: { published: <span class="kw">false</span> }
+})
+console.<span class="fn">log</span>(<span class="str">`Updated <span class="kw">${count}</span> posts`</span>)
+
+<span class="cm">// upsert — create if not found, update if found</span>
+<span class="kw">const</span> tag = <span class="kw">await</span> prisma.tag.<span class="fn">upsert</span>({
+  where: { name: <span class="str">'typescript'</span> },   <span class="cm">// check if exists</span>
+  create: { name: <span class="str">'typescript'</span> },   <span class="cm">// create if not found</span>
+  update: {}                           <span class="cm">// nothing to update if found</span>
+})</pre>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">update vs updateMany — critical difference</div>
+      <p><code>update()</code> throws <code>P2025</code> if the record doesn't exist. <code>updateMany()</code> silently returns <code>count: 0</code>. In fintech, prefer <code>update()</code> — you want to know if the record wasn't found rather than silently doing nothing.</p>
+    </div>
+
+    <div class="callout interview">
+      <div class="callout-label">Interview angle — upsert race condition</div>
+      <p><code>upsert</code> is not atomic under high concurrency — two requests can both find "not exists" and both try to create, causing a unique violation. In fintech, use an explicit transaction with find-then-create instead of upsert for critical records.</p>
+    </div>
+  </div>
+
+  <!-- ── DELETE ── -->
+  <div class="section">
+    <div class="section-label">05</div>
+    <h2>Delete operations</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">delete · deleteMany</span></div>
+      <pre><span class="cm">// delete — requires @id or @unique in where</span>
+<span class="cm">// Throws P2025 if record not found</span>
+<span class="kw">await</span> prisma.post.<span class="fn">delete</span>({
+  where: { id: <span class="str">'post-123'</span> }
+})
+
+<span class="cm">// deleteMany — any field in where, returns count</span>
+<span class="kw">const</span> { count } = <span class="kw">await</span> prisma.post.<span class="fn">deleteMany</span>({
+  where: { userId: user.id }
+})
+console.<span class="fn">log</span>(<span class="str">`Deleted <span class="kw">${count}</span> posts`</span>)</pre>
+    </div>
+  </div>
+
+  <!-- ── TYPESCRIPT TYPES ── -->
+  <div class="section">
+    <div class="section-label">06</div>
+    <h2>Prisma input types — the typed client</h2>
+
+    <p>When you run <code>prisma generate</code>, Prisma creates TypeScript types for every model. These are what make Prisma's type safety possible — mistakes are caught in your editor before they ever reach the DB.</p>
+
+    <div class="type-grid">
+      <div class="type-card">
+        <h4>PostCreateInput</h4>
+        <p>Data for create(). Required fields are required, optional fields are optional. Uses relation objects.</p>
+      </div>
+      <div class="type-card">
+        <h4>PostUncheckedCreateInput</h4>
+        <p>Same as CreateInput but uses raw FK values directly (userId: 'abc') instead of relation objects. Most common in real apps.</p>
+      </div>
+      <div class="type-card">
+        <h4>PostUpdateInput</h4>
+        <p>Data for update(). Everything is optional — only pass what you want to change.</p>
+      </div>
+      <div class="type-card">
+        <h4>PostWhereInput</h4>
+        <p>Filter for findMany(). Any field, supports AND/OR/NOT composition.</p>
+      </div>
+      <div class="type-card">
+        <h4>PostWhereUniqueInput</h4>
+        <p>Filter for findUnique() / update() / delete(). Only @id and @unique fields allowed.</p>
+      </div>
+      <div class="type-card">
+        <h4>PostSelect / PostInclude</h4>
+        <p>Control which fields and relations are returned. Use select to avoid over-fetching.</p>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">using types in a repository</span></div>
+      <pre><span class="kw">import</span> { <span class="type">PrismaClient</span>, <span class="type">Prisma</span> } <span class="kw">from</span> <span class="str">'@prisma/client'</span>
+
+<span class="kw">const</span> prisma = <span class="kw">new</span> <span class="type">PrismaClient</span>()
+
+<span class="cm">// PostCreateInput — required fields enforced by TypeScript</span>
+<span class="kw">const</span> createPost = <span class="kw">async</span> (data: <span class="type">Prisma</span>.<span class="type">PostCreateInput</span>) => {
+  <span class="kw">return</span> prisma.post.<span class="fn">create</span>({ data })
+}
+
+<span class="cm">// PostWhereUniqueInput — only @id or @unique</span>
+<span class="kw">const</span> getPost = <span class="kw">async</span> (where: <span class="type">Prisma</span>.<span class="type">PostWhereUniqueInput</span>) => {
+  <span class="kw">return</span> prisma.post.<span class="fn">findUnique</span>({ where })
+}
+
+<span class="cm">// PostWhereInput — any field combination</span>
+<span class="kw">const</span> getPosts = <span class="kw">async</span> (where: <span class="type">Prisma</span>.<span class="type">PostWhereInput</span>) => {
+  <span class="kw">return</span> prisma.post.<span class="fn">findMany</span>({ where, orderBy: { createdAt: <span class="str">'desc'</span> } })
+}
+
+<span class="cm">// PostUpdateInput — all optional, only change what you pass</span>
+<span class="kw">const</span> updatePost = <span class="kw">async</span> (
+  where: <span class="type">Prisma</span>.<span class="type">PostWhereUniqueInput</span>,
+  data: <span class="type">Prisma</span>.<span class="type">PostUpdateInput</span>
+) => {
+  <span class="kw">return</span> prisma.post.<span class="fn">update</span>({ where, data })
+}
+
+<span class="cm">// TypeScript catches mistakes at compile time</span>
+<span class="fn">createPost</span>({ title: <span class="num">123</span> })   <span class="cm">// ❌ type error — title must be string</span>
+<span class="fn">getPost</span>({ userId: <span class="str">'abc'</span> })   <span class="cm">// ❌ type error — userId is not @unique</span></pre>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">CreateInput vs UncheckedCreateInput</div>
+      <p><code>PostCreateInput</code> expects relation objects: <code>user: &#123; connect: &#123; id: 'abc' &#125; &#125;</code>. <code>PostUncheckedCreateInput</code> accepts raw FKs: <code>userId: 'abc'</code>. In real apps where you already have the FK (from a JWT token or URL param), use Unchecked — it's simpler and more common.</p>
+    </div>
+  </div>
+
+  <!-- ── VALIDATION LAYERS ── -->
+  <div class="section">
+    <div class="section-label">07</div>
+    <h2>Three layers of validation</h2>
+
+    <p>Prisma types are not the same as Joi validation — they catch errors at different stages. In a production fintech app you use all three:</p>
+
+    <div class="validation-flow">
+      <div class="flow-step joi">
+        <div class="label">Joi / Zod</div>
+        <p>Catches bad user input from outside</p>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step prisma">
+        <div class="label">Prisma types</div>
+        <p>Catches developer mistakes at compile time</p>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step db">
+        <div class="label">DB constraints</div>
+        <p>Catches race conditions and integrity violations</p>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">all three layers in a real endpoint</span></div>
+      <pre><span class="cm">// Layer 1 — Joi validates incoming request body</span>
+<span class="kw">const</span> { error } = createPostSchema.<span class="fn">validate</span>(req.body)
+<span class="kw">if</span> (error) <span class="kw">return</span> res.<span class="fn">status</span>(<span class="num">400</span>).<span class="fn">json</span>({ error })
+
+<span class="cm">// Layer 2 — Prisma types ensure correct shape in your code</span>
+<span class="kw">const</span> post = <span class="kw">await</span> <span class="fn">createPost</span>(req.body <span class="kw">as</span> <span class="type">Prisma</span>.<span class="type">PostCreateInput</span>)
+
+<span class="cm">// Layer 3 — DB @unique constraint catches race conditions</span>
+<span class="cm">// Prisma throws P2002 if two requests sneak through simultaneously</span></pre>
+    </div>
+  </div>
+
+  <!-- ── ERROR HANDLING ── -->
+  <div class="section">
+    <div class="section-label">08</div>
+    <h2>Error handling — P2002 and P2025</h2>
+
+    <p>Prisma throws typed errors you can catch and handle gracefully. Two codes you must know cold:</p>
+
+    <div class="error-card">
+      <div class="error-code">P2002</div>
+      <div class="error-body">
+        <h4>Unique constraint violation</h4>
+        <p>Thrown when you try to create a record that violates a <code>@unique</code> constraint — e.g. creating a user with an email that already exists.</p>
+      </div>
+    </div>
+
+    <div class="error-card">
+      <div class="error-code">P2025</div>
+      <div class="error-body">
+        <h4>Record not found</h4>
+        <p>Thrown by <code>update()</code> and <code>delete()</code> when the record in the where clause doesn't exist.</p>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">error handling pattern</span></div>
+      <pre><span class="kw">import</span> { <span class="type">PrismaClient</span>, <span class="type">Prisma</span> } <span class="kw">from</span> <span class="str">'@prisma/client'</span>
+
+<span class="kw">async function</span> <span class="fn">createUser</span>(email: <span class="type">string</span>) {
+  <span class="kw">try</span> {
+    <span class="kw">return await</span> prisma.user.<span class="fn">create</span>({ data: { email } })
+  } <span class="kw">catch</span> (error) {
+    <span class="kw">if</span> (error <span class="kw">instanceof</span> <span class="type">Prisma</span>.<span class="type">PrismaClientKnownRequestError</span>) {
+      <span class="kw">if</span> (error.code === <span class="str">'P2002'</span>) {
+        <span class="kw">throw new</span> <span class="type">Error</span>(<span class="str">`Email <span class="kw">${email}</span> already taken`</span>)
+      }
+      <span class="kw">if</span> (error.code === <span class="str">'P2025'</span>) {
+        <span class="kw">throw new</span> <span class="type">Error</span>(<span class="str">'Record not found'</span>)
+      }
+    }
+    <span class="kw">throw</span> error  <span class="cm">// rethrow unknown errors</span>
+  }
+}</pre>
+    </div>
+  </div>
+
+  <!-- ── MISTAKES ── -->
+  <div class="section">
+    <div class="section-label">09</div>
+    <h2>Mistakes made today</h2>
+
+    <ul class="mistakes-list">
+      <li>
+        <div class="mistake-num">1</div>
+        <div class="mistake-body">
+          <h4><code>async const</code> — invalid syntax</h4>
+          <p>The <code>async</code> keyword goes before the function body, not before <code>const</code>. Correct: <code>const fn = async () => &#123;&#125;</code></p>
+        </div>
+      </li>
+      <li>
+        <div class="mistake-num">2</div>
+        <div class="mistake-body">
+          <h4>Using <code>userId</code> in <code>findUnique</code> where clause</h4>
+          <p><code>findUnique</code> only accepts <code>@id</code> or <code>@unique</code> fields. <code>userId</code> is a plain FK — not unique. Use <code>findMany</code> to fetch by <code>userId</code>.</p>
+        </div>
+      </li>
+      <li>
+        <div class="mistake-num">3</div>
+        <div class="mistake-body">
+          <h4><code>prisma.userBlog</code> doesn't exist</h4>
+          <p>Prisma generates client methods from the exact model name. Model is <code>User</code> → client method is <code>prisma.user</code>. Always match the model name exactly (camelCase).</p>
+        </div>
+      </li>
+      <li>
+        <div class="mistake-num">4</div>
+        <div class="mistake-body">
+          <h4>Queries outside <code>main()</code> at top level</h4>
+          <p>Prisma queries are async and must run inside an async function. Top-level await requires ESM which conflicts with ts-node CommonJS setup. Keep all queries inside <code>main()</code>.</p>
+        </div>
+      </li>
+      <li>
+        <div class="mistake-num">5</div>
+        <div class="mistake-body">
+          <h4>Missing <code>where</code> and <code>update</code> in upsert</h4>
+          <p><code>upsert</code> requires all three clauses: <code>where</code> (check if exists), <code>create</code> (what to create), <code>update</code> (what to update if found). Missing any one throws a type error.</p>
+        </div>
+      </li>
+    </ul>
+  </div>
+
+  <!-- ── FULL WORKING FILE ── -->
+  <div class="section">
+    <div class="section-label">10</div>
+    <h2>Full working file</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">src/day3.ts — complete</span></div>
+      <pre><span class="kw">import</span> <span class="str">'dotenv/config'</span>
+<span class="kw">import</span> { <span class="type">PrismaClient</span>, <span class="type">Prisma</span> } <span class="kw">from</span> <span class="str">'@prisma/client'</span>
+
+<span class="kw">const</span> prisma = <span class="kw">new</span> <span class="type">PrismaClient</span>()
+
+<span class="kw">const</span> createPost = <span class="kw">async</span> (data: <span class="type">Prisma</span>.<span class="type">PostCreateInput</span>) => {
+  <span class="kw">return</span> prisma.post.<span class="fn">create</span>({ data })
+}
+
+<span class="kw">async function</span> <span class="fn">main</span>() {
+  <span class="cm">// Create</span>
+  <span class="kw">const</span> user = <span class="kw">await</span> prisma.user.<span class="fn">create</span>({
+    data: { email: <span class="str">'anil@test.com'</span>, name: <span class="str">'Anil'</span> }
+  })
+
+  <span class="cm">// Nested create</span>
+  <span class="kw">await</span> prisma.user.<span class="fn">create</span>({
+    data: {
+      email: <span class="str">'test2@test.com'</span>, name: <span class="str">'Test'</span>,
+      posts: { create: { title: <span class="str">'My first post'</span>, content: <span class="str">'Hello'</span> } }
+    }
+  })
+
+  <span class="cm">// Fetch with include</span>
+  <span class="kw">const</span> userWithPost = <span class="kw">await</span> prisma.user.<span class="fn">findUnique</span>({
+    where: { email: <span class="str">'test2@test.com'</span> },
+    include: { posts: <span class="kw">true</span> }
+  })
+
+  <span class="cm">// Bulk insert</span>
+  <span class="kw">await</span> prisma.tag.<span class="fn">createMany</span>({
+    data: [{ name: <span class="str">'typescript'</span> }, { name: <span class="str">'prisma'</span> }, { name: <span class="str">'nodejs'</span> }],
+    skipDuplicates: <span class="kw">true</span>
+  })
+
+  <span class="cm">// Find</span>
+  <span class="kw">const</span> latestPost = <span class="kw">await</span> prisma.post.<span class="fn">findFirst</span>({
+    where: { published: <span class="kw">true</span> }, orderBy: { createdAt: <span class="str">'desc'</span> }
+  })
+
+  <span class="cm">// findMany by userId (non-unique field — use findMany not findUnique)</span>
+  <span class="kw">const</span> userPosts = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+    where: { userId: user.id }, orderBy: { createdAt: <span class="str">'desc'</span> }
+  })
+
+  <span class="cm">// updateMany — returns count</span>
+  <span class="kw">const</span> { count } = <span class="kw">await</span> prisma.post.<span class="fn">updateMany</span>({
+    where: { userId: user.id }, data: { published: <span class="kw">false</span> }
+  })
+
+  <span class="cm">// upsert — all three clauses required</span>
+  <span class="kw">const</span> tag = <span class="kw">await</span> prisma.tag.<span class="fn">upsert</span>({
+    where: { name: <span class="str">'typescript'</span> },
+    create: { name: <span class="str">'typescript'</span> },
+    update: {}
+  })
+
+  <span class="cm">// deleteMany by userId</span>
+  <span class="kw">await</span> prisma.post.<span class="fn">deleteMany</span>({ where: { userId: user.id } })
+}
+
+<span class="fn">main</span>()
+  .<span class="fn">catch</span>(console.error)
+  .<span class="fn">finally</span>(() => prisma.<span class="fn">$disconnect</span>())</pre>
+    </div>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">11</div>
+    <h2>Day 3 summary</h2>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h4>Unique rule</h4>
+        <p>findUnique / update / delete need @id or @unique. Many variants accept any field.</p>
+      </div>
+      <div class="summary-card">
+        <h4>upsert</h4>
+        <p>Needs where + create + update. Not atomic under concurrency — use transaction in fintech.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Prisma types</h4>
+        <p>CreateInput, UpdateInput, WhereInput, WhereUniqueInput. Import from Prisma namespace.</p>
+      </div>
+      <div class="summary-card">
+        <h4>UncheckedCreateInput</h4>
+        <p>Use raw FK values instead of relation objects. Most practical in real apps.</p>
+      </div>
+      <div class="summary-card">
+        <h4>P2002</h4>
+        <p>Unique constraint violation — email already exists, duplicate SKU, etc.</p>
+      </div>
+      <div class="summary-card">
+        <h4>P2025</h4>
+        <p>Record not found — thrown by update() and delete() when where has no match.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Prisma Study Plan · April 2025 · Anil</p>
+  <span class="next-day">Day 4 → Interview Q: schema design out loud</span>
+</footer>
+
+</body>
+</html>

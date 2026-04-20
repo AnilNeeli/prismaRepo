@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prisma Day 6 — N+1 Deep Dive</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Fraunces:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: #2a2a2a;
+    --accent: #5DCAA5;
+    --accent2: #7F77DD;
+    --warn: #EF9F27;
+    --danger: #E24B4A;
+    --blue: #85B7EB;
+    --text: #e8e8e2;
+    --muted: #888880;
+    --faint: #444440;
+    --mono: 'JetBrains Mono', monospace;
+    --serif: 'Fraunces', serif;
+    --sans: 'DM Sans', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.7; }
+
+  header { border-bottom: 1px solid var(--border); padding: 48px 60px 40px; position: relative; overflow: hidden; }
+  header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 300px; height: 300px; background: radial-gradient(circle, rgba(226,75,74,0.07) 0%, transparent 70%); pointer-events: none; }
+  .header-tag { font-family: var(--mono); font-size: 11px; color: var(--danger); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  header h1 { font-family: var(--serif); font-size: 36px; font-weight: 600; color: #fff; line-height: 1.2; margin-bottom: 8px; }
+  header h1 em { font-style: italic; color: var(--danger); }
+  header p { font-size: 14px; color: var(--muted); max-width: 560px; }
+  .header-meta { display: flex; gap: 24px; margin-top: 24px; flex-wrap: wrap; }
+  .meta-chip { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); padding: 4px 12px; border-radius: 20px; }
+  .meta-chip span { color: var(--text); }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 48px 60px 80px; }
+
+  .section { margin-bottom: 52px; }
+  .section-label { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--danger); margin-bottom: 6px; }
+  .section h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
+  p { color: var(--text); margin-bottom: 12px; line-height: 1.75; }
+  p:last-child { margin-bottom: 0; }
+
+  .code-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 16px 0; overflow: hidden; }
+  .code-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .code-lang { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .code-label { font-family: var(--mono); font-size: 10px; color: var(--danger); }
+  .code-label.good { color: var(--accent); }
+  pre { padding: 20px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; color: var(--text); }
+  .kw { color: #7F77DD; }
+  .str { color: #5DCAA5; }
+  .cm { color: #555550; font-style: italic; }
+  .dec { color: #EF9F27; }
+  .type { color: #85B7EB; }
+  .num { color: #F0997B; }
+  .fn { color: #e8e8e2; }
+  .bad { color: #E24B4A; }
+  .good { color: #5DCAA5; }
+
+  code { font-family: var(--mono); font-size: 12px; background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--accent); }
+
+  .callout { border-left: 3px solid; border-radius: 0 6px 6px 0; padding: 14px 18px; margin: 16px 0; }
+  .callout-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+  .callout p { margin: 0; font-size: 13px; }
+  .callout.interview { border-color: var(--warn); background: rgba(239,159,39,0.06); }
+  .callout.interview .callout-label { color: var(--warn); }
+  .callout.gotcha { border-color: var(--danger); background: rgba(226,75,74,0.06); }
+  .callout.gotcha .callout-label { color: var(--danger); }
+  .callout.tip { border-color: var(--accent); background: rgba(93,202,165,0.06); }
+  .callout.tip .callout-label { color: var(--accent); }
+  .callout.rule { border-color: var(--accent2); background: rgba(127,119,221,0.06); }
+  .callout.rule .callout-label { color: var(--accent2); }
+
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); padding: 10px 14px; text-align: left; font-weight: 400; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  td.desc { color: var(--muted); font-size: 13px; }
+  td.bad { color: var(--danger); font-size: 13px; }
+  td.good { color: var(--accent); font-size: 13px; }
+
+  .query-flow { margin: 16px 0; }
+  .query-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--faint); }
+  .query-row:last-child { border-bottom: none; }
+  .query-num { font-family: var(--mono); font-size: 11px; font-weight: 600; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .query-num.bad { background: rgba(226,75,74,0.15); color: var(--danger); }
+  .query-num.good { background: rgba(93,202,165,0.15); color: var(--accent); }
+  .query-sql { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .query-sql span { color: var(--text); }
+
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .compare-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .compare-card h4 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+  .compare-card.bad h4 { color: var(--danger); }
+  .compare-card.good h4 { color: var(--accent); }
+  .compare-card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  .pattern-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin: 16px 0; }
+  .pattern-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .pattern-card h4 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .pattern-card p { font-size: 12px; color: var(--muted); margin: 0; }
+  .pattern-card.p1 h4 { color: var(--danger); }
+  .pattern-card.p2 h4 { color: var(--warn); }
+  .pattern-card.p3 h4 { color: var(--accent); }
+  .pattern-card.p4 h4 { color: var(--accent2); }
+
+  .interview-flow { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin: 16px 0; }
+  .interview-flow h3 { font-family: var(--mono); font-size: 11px; color: var(--warn); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow-step { display: flex; gap: 14px; margin-bottom: 12px; align-items: flex-start; }
+  .flow-step:last-child { margin-bottom: 0; }
+  .flow-num { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--bg); background: var(--warn); width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .flow-content h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+  .flow-content p { font-size: 12px; color: var(--muted); margin: 0; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; border-top: 2px solid var(--danger); }
+  .summary-card h4 { font-family: var(--mono); font-size: 11px; color: var(--danger); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .summary-card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  footer { border-top: 1px solid var(--border); padding: 24px 60px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  footer p { font-family: var(--mono); font-size: 11px; color: var(--faint); margin: 0; }
+  .next-day { font-family: var(--mono); font-size: 11px; color: var(--accent); background: rgba(93,202,165,0.08); border: 1px solid rgba(93,202,165,0.2); padding: 6px 14px; border-radius: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">Prisma Study Plan · April 2025</div>
+  <h1>Day 6 — <em>N+1 Deep Dive</em></h1>
+  <p>The most common Prisma interview topic · spot it · reproduce it · fix it · optimize it</p>
+  <div class="header-meta">
+    <div class="meta-chip">Phase <span>2 of 5</span></div>
+    <div class="meta-chip">Date <span>Tue Apr 8</span></div>
+    <div class="meta-chip">Stack <span>Prisma 5 · TS · Neon</span></div>
+    <div class="meta-chip">Status <span style="color:#5DCAA5">✓ Complete</span></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── WHAT IS N+1 ── -->
+  <div class="section">
+    <div class="section-label">01</div>
+    <h2>What is N+1?</h2>
+
+    <p>You make <strong>1 query</strong> to fetch a list, then <strong>N more queries</strong> — one for each item — to fetch related data. Total = N+1 database round trips instead of 1.</p>
+
+    <div class="compare-grid">
+      <div class="compare-card bad">
+        <h4>N+1 — bad</h4>
+        <p>10 posts = 11 queries. 100 posts = 101 queries. Gets worse as data grows.</p>
+      </div>
+      <div class="compare-card good">
+        <h4>include — fixed</h4>
+        <p>Always 2 queries regardless of how many posts. Prisma batches with IN clause.</p>
+      </div>
+    </div>
+
+    <div class="query-flow">
+      <div class="query-row">
+        <div class="query-num bad">1</div>
+        <div class="query-sql"><span>SELECT * FROM "Post"</span> — fetches all posts</div>
+      </div>
+      <div class="query-row">
+        <div class="query-num bad">2</div>
+        <div class="query-sql"><span>SELECT * FROM "UserBlog" WHERE id = 'uuid-1'</span> — loop query</div>
+      </div>
+      <div class="query-row">
+        <div class="query-num bad">3</div>
+        <div class="query-sql"><span>SELECT * FROM "UserBlog" WHERE id = 'uuid-2'</span> — loop query</div>
+      </div>
+      <div class="query-row">
+        <div class="query-num bad">4</div>
+        <div class="query-sql"><span>SELECT * FROM "UserBlog" WHERE id = 'uuid-3'</span> — loop query</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ENABLE LOGGING ── -->
+  <div class="section">
+    <div class="section-label">02</div>
+    <h2>Enable query logging — see it in terminal</h2>
+
+    <p>First thing to do when debugging performance. Every SQL query Prisma sends will print in your terminal.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">always do this first</span></div>
+      <pre><span class="kw">const</span> prisma = <span class="kw">new</span> <span class="type">PrismaClient</span>({
+  log: [<span class="str">'query'</span>]  <span class="cm">// prints every SQL query to terminal</span>
+})</pre>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">What you'll see</div>
+      <p>Each query prints as <code>prisma:query SELECT ...</code>. Count the lines — if you see N+1 lines for a loop, that's your problem. If you see 2 lines for an include, that's your fix working.</p>
+    </div>
+  </div>
+
+  <!-- ── REPRODUCE ── -->
+  <div class="section">
+    <div class="section-label">03</div>
+    <h2>Reproduce N+1 deliberately</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">N+1 — the bad version</span></div>
+      <pre><span class="cm">// 1 query — fetches all posts</span>
+<span class="kw">const</span> posts = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>()
+
+<span class="cm">// N queries — one per post — THIS IS THE PROBLEM</span>
+<span class="kw">for</span> (<span class="kw">const</span> post <span class="kw">of</span> posts) {
+  <span class="kw">const</span> user = <span class="kw">await</span> prisma.userBlog.<span class="fn">findUnique</span>({
+    where: { id: post.userId }
+  })
+  console.<span class="fn">log</span>(<span class="str">`<span class="kw">${post.title}</span> by <span class="kw">${user?.name}</span>`</span>)
+}
+
+<span class="cm">// Terminal shows:</span>
+<span class="cm">// prisma:query SELECT * FROM "Post"</span>
+<span class="cm">// prisma:query SELECT * FROM "UserBlog" WHERE id = $1  ← repeated N times</span>
+<span class="cm">// prisma:query SELECT * FROM "UserBlog" WHERE id = $1</span>
+<span class="cm">// prisma:query SELECT * FROM "UserBlog" WHERE id = $1</span></pre>
+    </div>
+  </div>
+
+  <!-- ── FIX ── -->
+  <div class="section">
+    <div class="section-label">04</div>
+    <h2>Fix with include</h2>
+
+    <p>Prisma batches all user IDs into a single <code>IN</code> clause — always 2 queries regardless of post count.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">fixed — always 2 queries</span></div>
+      <pre><span class="kw">const</span> postsWithUsers = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+  include: { user: <span class="kw">true</span> }
+})
+
+<span class="kw">for</span> (<span class="kw">const</span> post <span class="kw">of</span> postsWithUsers) {
+  console.<span class="fn">log</span>(<span class="str">`<span class="kw">${post.title}</span> by <span class="kw">${post.user.name}</span>`</span>)
+}
+
+<span class="cm">// Terminal shows ONLY 2 queries:</span>
+<span class="cm">// prisma:query SELECT * FROM "Post"</span>
+<span class="cm">// prisma:query SELECT * FROM "UserBlog" WHERE id IN ('uuid-1', 'uuid-2', 'uuid-3')</span></pre>
+    </div>
+
+    <div class="callout rule">
+      <div class="callout-label">Why include fixes it</div>
+      <p>Instead of one query per post, Prisma collects all the <code>userId</code> values and fires a single <code>WHERE id IN (...)</code> query. The query count stays fixed at 2 regardless of how many posts you have.</p>
+    </div>
+  </div>
+
+  <!-- ── INCLUDE VS SELECT ── -->
+  <div class="section">
+    <div class="section-label">05</div>
+    <h2>include vs select — full comparison</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">four patterns</span></div>
+      <pre><span class="cm">// Pattern 1 — all Post fields, no relation</span>
+prisma.post.<span class="fn">findMany</span>()
+
+<span class="cm">// Pattern 2 — all Post fields + full User record</span>
+prisma.post.<span class="fn">findMany</span>({
+  include: { user: <span class="kw">true</span> }
+})
+
+<span class="cm">// Pattern 3 — all Post fields + partial User (most common in production)</span>
+prisma.post.<span class="fn">findMany</span>({
+  include: {
+    user: { select: { name: <span class="kw">true</span>, email: <span class="kw">true</span> } }
+  }
+})
+
+<span class="cm">// Pattern 4 — partial Post + partial User (most performant)</span>
+prisma.post.<span class="fn">findMany</span>({
+  select: {
+    title: <span class="kw">true</span>,
+    user: { select: { name: <span class="kw">true</span>, email: <span class="kw">true</span> } }
+  }
+})</pre>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">Cannot use select + include together at top level</div>
+      <p>Prisma throws an error if you use both <code>select</code> and <code>include</code> at the same level. Use one or the other. You CAN use <code>select</code> nested inside <code>include</code> — that's Pattern 3 above.</p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Pattern</th><th>Post fields</th><th>User fields</th><th>Use when</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>findMany()</td>
+            <td class="desc">All</td>
+            <td class="desc">None</td>
+            <td class="desc">Don't need relations</td>
+          </tr>
+          <tr>
+            <td>include: &#123; user: true &#125;</td>
+            <td class="desc">All</td>
+            <td class="desc">All</td>
+            <td class="desc">Dev / debugging only</td>
+          </tr>
+          <tr>
+            <td>include + nested select</td>
+            <td class="desc">All</td>
+            <td class="desc">Specific</td>
+            <td class="desc">Production — need all post fields</td>
+          </tr>
+          <tr>
+            <td>select at top level</td>
+            <td class="desc">Specific</td>
+            <td class="desc">Specific</td>
+            <td class="desc">Production — maximum performance</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">How select works on relations</div>
+      <p>When you list a relation field inside <code>select</code>, Prisma automatically knows to fetch it — no <code>include</code> needed. TypeScript also narrows the return type to exactly what you selected — accessing an unselected field is a compile-time error.</p>
+    </div>
+  </div>
+
+  <!-- ── NESTED N+1 ── -->
+  <div class="section">
+    <div class="section-label">06</div>
+    <h2>Nested N+1 and nested include</h2>
+
+    <p>N+1 can happen at multiple levels. Posts → Users + Comments → Comment authors.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">nested include — what it fetches</span></div>
+      <pre><span class="kw">const</span> posts = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+  include: {
+    user: { select: { name: <span class="kw">true</span> } },     <span class="cm">// who wrote the post</span>
+    comments: {
+      include: {
+        user: { select: { name: <span class="kw">true</span> } }  <span class="cm">// who wrote each comment</span>
+      }
+    }
+  }
+})
+
+<span class="cm">// Result shape:</span>
+<span class="cm">// {</span>
+<span class="cm">//   id, title, content, ...,</span>
+<span class="cm">//   user: { name: 'Anil' },           ← post author</span>
+<span class="cm">//   comments: [</span>
+<span class="cm">//     { body: 'Great!', user: { name: 'User 2' } },   ← comment + author</span>
+<span class="cm">//     { body: 'Thanks!', user: { name: 'User 3' } }</span>
+<span class="cm">//   ]</span>
+<span class="cm">// }</span></pre>
+    </div>
+
+    <p>This runs <strong>4 queries total</strong> — fixed, regardless of data size:</p>
+
+    <div class="query-flow">
+      <div class="query-row">
+        <div class="query-num good">1</div>
+        <div class="query-sql"><span>SELECT * FROM "Post"</span></div>
+      </div>
+      <div class="query-row">
+        <div class="query-num good">2</div>
+        <div class="query-sql"><span>SELECT name FROM "UserBlog" WHERE id IN (...)</span> — post authors</div>
+      </div>
+      <div class="query-row">
+        <div class="query-num good">3</div>
+        <div class="query-sql"><span>SELECT * FROM "Comment" WHERE postId IN (...)</span> — all comments</div>
+      </div>
+      <div class="query-row">
+        <div class="query-num good">4</div>
+        <div class="query-sql"><span>SELECT name FROM "UserBlog" WHERE id IN (...)</span> — comment authors</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── INCLUDE VS JOIN ── -->
+  <div class="section">
+    <div class="section-label">07</div>
+    <h2>include vs SQL JOIN</h2>
+
+    <p>Both solve N+1 but work differently under the hood:</p>
+
+    <div class="compare-grid">
+      <div class="compare-card good">
+        <h4>SQL JOIN — 1 query</h4>
+        <p>One round trip. Data merged in Postgres. Fastest at the DB level. Use via $queryRaw when Prisma's include is too slow.</p>
+      </div>
+      <div class="compare-card good">
+        <h4>Prisma include — 2 queries</h4>
+        <p>Two round trips. Prisma merges in Node.js memory. Simpler to write. Fine for 99% of cases.</p>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Approach</th><th>Queries</th><th>When to use</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Loop (N+1)</td>
+            <td class="bad">1 + N</td>
+            <td class="desc">Never in production</td>
+          </tr>
+          <tr>
+            <td>include</td>
+            <td class="good">2 (fixed)</td>
+            <td class="desc">Most cases — simple and correct</td>
+          </tr>
+          <tr>
+            <td>Raw SQL JOIN</td>
+            <td class="good">1</td>
+            <td class="desc">Complex reporting, maximum performance</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── INTERVIEW ANSWER ── -->
+  <div class="section">
+    <div class="section-label">08</div>
+    <h2>The interview answer — memorize this flow</h2>
+
+    <div class="interview-flow">
+      <h3>When asked "explain N+1 and how you fix it in Prisma"</h3>
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <div class="flow-content">
+          <h4>Spot it</h4>
+          <p>Enable <code>log: ['query']</code>, count the queries in terminal — if it grows with data, it's N+1</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <div class="flow-content">
+          <h4>Cause</h4>
+          <p>Fetching related data inside a loop — one query per iteration instead of batching</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <div class="flow-content">
+          <h4>Fix</h4>
+          <p>Use <code>include</code> — Prisma batches all IDs into a single <code>IN</code> clause, always 2 queries</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">4</div>
+        <div class="flow-content">
+          <h4>Optimize</h4>
+          <p>Use <code>select</code> inside <code>include</code> to avoid over-fetching large records</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">5</div>
+        <div class="flow-content">
+          <h4>Edge case</h4>
+          <p>Very large datasets where even the IN clause is slow → drop to <code>$queryRaw</code> with a real SQL JOIN</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── FULL WORKING FILE ── -->
+  <div class="section">
+    <div class="section-label">09</div>
+    <h2>Full working file</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">src/day6.ts — complete</span></div>
+      <pre><span class="kw">import</span> <span class="str">'dotenv/config'</span>
+<span class="kw">import</span> { <span class="type">PrismaClient</span> } <span class="kw">from</span> <span class="str">'@prisma/client'</span>
+
+<span class="kw">const</span> prisma = <span class="kw">new</span> <span class="type">PrismaClient</span>({ log: [<span class="str">'query'</span>] })
+
+<span class="kw">async function</span> <span class="fn">main</span>() {
+
+  <span class="cm">// Seed data</span>
+  <span class="kw">await</span> prisma.userBlog.<span class="fn">createMany</span>({
+    data: [
+      { email: <span class="str">'user1@test.com'</span>, name: <span class="str">'User 1'</span>, age: <span class="num">25</span> },
+      { email: <span class="str">'user2@test.com'</span>, name: <span class="str">'User 2'</span>, age: <span class="num">30</span> },
+      { email: <span class="str">'user3@test.com'</span>, name: <span class="str">'User 3'</span>, age: <span class="num">28</span> },
+    ],
+    skipDuplicates: <span class="kw">true</span>
+  })
+
+  <span class="cm">// ❌ N+1 — watch query count in terminal</span>
+  console.<span class="fn">log</span>(<span class="str">'\n--- N+1 (BAD) ---'</span>)
+  <span class="kw">const</span> posts = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>()
+  <span class="kw">for</span> (<span class="kw">const</span> post <span class="kw">of</span> posts) {
+    <span class="kw">const</span> user = <span class="kw">await</span> prisma.userBlog.<span class="fn">findUnique</span>({ where: { id: post.userId } })
+    console.<span class="fn">log</span>(<span class="str">`<span class="kw">${post.title}</span> by <span class="kw">${user?.name}</span>`</span>)
+  }
+
+  <span class="cm">// ✅ Fixed with include + select</span>
+  console.<span class="fn">log</span>(<span class="str">'\n--- FIXED WITH INCLUDE + SELECT ---'</span>)
+  <span class="kw">const</span> postsFixed = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+    include: { user: { select: { name: <span class="kw">true</span>, email: <span class="kw">true</span> } } }
+  })
+  <span class="kw">for</span> (<span class="kw">const</span> post <span class="kw">of</span> postsFixed) {
+    console.<span class="fn">log</span>(<span class="str">`<span class="kw">${post.title}</span> by <span class="kw">${post.user.name}</span>`</span>)
+  }
+
+  <span class="cm">// ✅ Most performant — select at top level</span>
+  console.<span class="fn">log</span>(<span class="str">'\n--- MOST PERFORMANT ---'</span>)
+  <span class="kw">const</span> postsBest = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+    select: {
+      title: <span class="kw">true</span>,
+      user: { select: { name: <span class="kw">true</span>, email: <span class="kw">true</span> } }
+    }
+  })
+  <span class="kw">for</span> (<span class="kw">const</span> post <span class="kw">of</span> postsBest) {
+    console.<span class="fn">log</span>(<span class="str">`<span class="kw">${post.title}</span> by <span class="kw">${post.user.name}</span>`</span>)
+  }
+
+}
+
+<span class="fn">main</span>()
+  .<span class="fn">catch</span>(console.error)
+  .<span class="fn">finally</span>(() => prisma.<span class="fn">$disconnect</span>())</pre>
+    </div>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">10</div>
+    <h2>Day 6 summary</h2>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h4>N+1</h4>
+        <p>1 query + N queries in a loop. Grows with data. Always bad in production.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Spot it</h4>
+        <p>log: ['query'] in PrismaClient. Count lines in terminal. Fixed count = good.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Fix it</h4>
+        <p>include batches into IN clause. Always 2 queries regardless of data size.</p>
+      </div>
+      <div class="summary-card">
+        <h4>select vs include</h4>
+        <p>Can't use both at top level. select inside include = partial fields on relation.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Nested include</h4>
+        <p>Posts + authors + comments + comment authors = 4 queries. Fixed count.</p>
+      </div>
+      <div class="summary-card">
+        <h4>include vs JOIN</h4>
+        <p>include = 2 queries merged in Node. JOIN = 1 query in Postgres. Both fix N+1.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Prisma Study Plan · April 2025 · Anil</p>
+  <span class="next-day">Day 7 → Pagination + sorting</span>
+</footer>
+
+</body>
+</html>

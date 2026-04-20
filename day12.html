@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prisma Day 13 — Soft Deletes + Audit Trail</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Fraunces:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: #2a2a2a;
+    --accent: #5DCAA5;
+    --accent2: #7F77DD;
+    --warn: #EF9F27;
+    --danger: #E24B4A;
+    --blue: #85B7EB;
+    --text: #e8e8e2;
+    --muted: #888880;
+    --faint: #444440;
+    --mono: 'JetBrains Mono', monospace;
+    --serif: 'Fraunces', serif;
+    --sans: 'DM Sans', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.7; }
+
+  header { border-bottom: 1px solid var(--border); padding: 48px 60px 40px; position: relative; overflow: hidden; }
+  header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 300px; height: 300px; background: radial-gradient(circle, rgba(212,83,126,0.07) 0%, transparent 70%); pointer-events: none; }
+  .header-tag { font-family: var(--mono); font-size: 11px; color: #D4537E; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  header h1 { font-family: var(--serif); font-size: 36px; font-weight: 600; color: #fff; line-height: 1.2; margin-bottom: 8px; }
+  header h1 em { font-style: italic; color: #D4537E; }
+  header p { font-size: 14px; color: var(--muted); max-width: 560px; }
+  .header-meta { display: flex; gap: 24px; margin-top: 24px; flex-wrap: wrap; }
+  .meta-chip { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); padding: 4px 12px; border-radius: 20px; }
+  .meta-chip span { color: var(--text); }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 48px 60px 80px; }
+
+  .section { margin-bottom: 52px; }
+  .section-label { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #D4537E; margin-bottom: 6px; }
+  .section h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
+  p { color: var(--text); margin-bottom: 12px; line-height: 1.75; }
+  p:last-child { margin-bottom: 0; }
+
+  .code-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 16px 0; overflow: hidden; }
+  .code-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .code-lang { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .code-label { font-family: var(--mono); font-size: 10px; color: #D4537E; }
+  .code-label.good { color: var(--accent); }
+  .code-label.warn { color: var(--warn); }
+  .code-label.danger { color: var(--danger); }
+  pre { padding: 20px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; color: var(--text); }
+  .kw { color: #7F77DD; }
+  .str { color: #5DCAA5; }
+  .cm { color: #555550; font-style: italic; }
+  .dec { color: #EF9F27; }
+  .type { color: #85B7EB; }
+  .num { color: #F0997B; }
+  .fn { color: #e8e8e2; }
+  .good { color: #5DCAA5; }
+  .bad { color: #E24B4A; }
+
+  code { font-family: var(--mono); font-size: 12px; background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--accent); }
+
+  .callout { border-left: 3px solid; border-radius: 0 6px 6px 0; padding: 14px 18px; margin: 16px 0; }
+  .callout-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+  .callout p { margin: 0; font-size: 13px; }
+  .callout.interview { border-color: var(--warn); background: rgba(239,159,39,0.06); }
+  .callout.interview .callout-label { color: var(--warn); }
+  .callout.gotcha { border-color: var(--danger); background: rgba(226,75,74,0.06); }
+  .callout.gotcha .callout-label { color: var(--danger); }
+  .callout.tip { border-color: var(--accent); background: rgba(93,202,165,0.06); }
+  .callout.tip .callout-label { color: var(--accent); }
+  .callout.rule { border-color: var(--accent2); background: rgba(127,119,221,0.06); }
+  .callout.rule .callout-label { color: var(--accent2); }
+  .callout.fintech { border-color: #D4537E; background: rgba(212,83,126,0.06); }
+  .callout.fintech .callout-label { color: #D4537E; }
+
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); padding: 10px 14px; text-align: left; font-weight: 400; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--mono); font-size: 12px; color: #D4537E; }
+  td.desc { color: var(--muted); font-size: 13px; }
+  td.good { color: var(--accent); font-size: 13px; }
+  td.bad { color: var(--danger); font-size: 13px; }
+
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .compare-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .compare-card h4 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .compare-card.hard h4 { color: var(--danger); }
+  .compare-card.soft h4 { color: var(--accent); }
+  .compare-card ul { list-style: none; padding: 0; }
+  .compare-card ul li { font-size: 12.5px; color: var(--muted); padding: 4px 0 4px 14px; position: relative; border-bottom: 1px solid var(--faint); }
+  .compare-card ul li:last-child { border-bottom: none; }
+  .compare-card ul li::before { content: '›'; position: absolute; left: 2px; }
+  .compare-card.hard ul li::before { color: var(--danger); }
+  .compare-card.soft ul li::before { color: var(--accent); }
+
+  .middleware-flow { margin: 16px 0; }
+  .middleware-step { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 16px; margin-bottom: 6px; display: flex; gap: 12px; align-items: flex-start; }
+  .middleware-badge { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
+  .middleware-badge.before { background: rgba(133,183,235,0.15); color: var(--blue); }
+  .middleware-badge.execute { background: rgba(93,202,165,0.15); color: var(--accent); }
+  .middleware-badge.after { background: rgba(212,83,126,0.15); color: #D4537E; }
+  .middleware-badge.return { background: rgba(127,119,221,0.15); color: var(--accent2); }
+  .middleware-text { font-size: 12.5px; color: var(--muted); }
+  .middleware-text span { color: var(--text); font-family: var(--mono); font-size: 12px; }
+
+  .params-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0; }
+  .param-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .param-card h4 { font-family: var(--mono); font-size: 12px; color: #D4537E; margin-bottom: 6px; }
+  .param-card p { font-size: 12px; color: var(--muted); margin: 0; }
+
+  .dynamic-access { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 16px 0; }
+  .access-row { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; display: flex; gap: 12px; align-items: center; }
+  .access-icon { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; white-space: nowrap; flex-shrink: 0; }
+  .access-icon.good { background: rgba(93,202,165,0.15); color: var(--accent); }
+  .access-icon.bad { background: rgba(226,75,74,0.15); color: var(--danger); }
+  .access-icon.ok { background: rgba(239,159,39,0.15); color: var(--warn); }
+  .access-text { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .access-text span { color: var(--text); }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; border-top: 2px solid #D4537E; }
+  .summary-card h4 { font-family: var(--mono); font-size: 11px; color: #D4537E; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .summary-card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  footer { border-top: 1px solid var(--border); padding: 24px 60px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  footer p { font-family: var(--mono); font-size: 11px; color: var(--faint); margin: 0; }
+  .next-day { font-family: var(--mono); font-size: 11px; color: var(--accent); background: rgba(93,202,165,0.08); border: 1px solid rgba(93,202,165,0.2); padding: 6px 14px; border-radius: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">Prisma Study Plan · April 2025</div>
+  <h1>Day 13 — <em>Soft Deletes + Audit Trail</em></h1>
+  <p>deletedAt pattern · $use() middleware · global filter · audit log · dynamic property access</p>
+  <div class="header-meta">
+    <div class="meta-chip">Phase <span>3 of 5</span></div>
+    <div class="meta-chip">Date <span>Thu Apr 17</span></div>
+    <div class="meta-chip">Stack <span>Prisma 5 · TS · Neon</span></div>
+    <div class="meta-chip">Status <span style="color:#5DCAA5">✓ Complete</span></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── WHY SOFT DELETES ── -->
+  <div class="section">
+    <div class="section-label">01</div>
+    <h2>Why soft deletes?</h2>
+
+    <div class="compare-grid">
+      <div class="compare-card hard">
+        <h4>Hard delete — dangerous</h4>
+        <ul>
+          <li>Record gone forever — unrecoverable</li>
+          <li>Audit trail broken</li>
+          <li>Foreign key violations if referenced</li>
+          <li>Fails regulatory compliance</li>
+        </ul>
+      </div>
+      <div class="compare-card soft">
+        <h4>Soft delete — safe</h4>
+        <ul>
+          <li>Record stays in DB — recoverable</li>
+          <li>Audit trail intact</li>
+          <li>No FK violations</li>
+          <li>Compliant with financial regulations</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout fintech">
+      <div class="callout-label">Fintech critical</div>
+      <p>Regulators require transaction history to be permanent. A user deletes their account — their transaction records must still exist for compliance audits. Hard delete in fintech = regulatory violation.</p>
+    </div>
+  </div>
+
+  <!-- ── SCHEMA ── -->
+  <div class="section">
+    <div class="section-label">02</div>
+    <h2>Schema setup — deletedAt pattern</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">prisma</span><span class="code-label">add to every model that needs soft delete</span></div>
+      <pre><span class="kw">model</span> <span class="type">UserBlog</span> {
+  id        <span class="type">String</span>    <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  email     <span class="type">String</span>    <span class="dec">@unique</span>
+  name      <span class="type">String</span><span class="kw">?</span>
+  age       <span class="type">Int</span>
+  deletedAt <span class="type">DateTime</span><span class="kw">?</span>  <span class="cm">// null = active, timestamp = soft deleted</span>
+  posts     <span class="type">Post</span>[]
+  createdAt <span class="type">DateTime</span>  <span class="dec">@default</span>(<span class="fn">now</span>())
+  updatedAt <span class="type">DateTime</span>  <span class="dec">@updatedAt</span>
+}
+
+<span class="kw">model</span> <span class="type">AuditLog</span> {
+  id        <span class="type">String</span>   <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  model     <span class="type">String</span>   <span class="cm">// "UserBlog", "Post", "Transaction"</span>
+  recordId  <span class="type">String</span>   <span class="cm">// id of the affected record</span>
+  action    <span class="type">String</span>   <span class="cm">// "CREATE", "UPDATE", "DELETE"</span>
+  before    <span class="type">Json</span><span class="kw">?</span>    <span class="cm">// state before the change</span>
+  after     <span class="type">Json</span><span class="kw">?</span>    <span class="cm">// state after the change</span>
+  userId    <span class="type">String</span><span class="kw">?</span>  <span class="cm">// who made the change</span>
+  createdAt <span class="type">DateTime</span> <span class="dec">@default</span>(<span class="fn">now</span>())
+
+  <span class="dec">@@index</span>([model, recordId])  <span class="cm">// fast lookup by record</span>
+  <span class="dec">@@index</span>([createdAt])        <span class="cm">// fast lookup by time</span>
+}</pre>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">Rule</div>
+      <p><code>deletedAt = null</code> → active record. <code>deletedAt = timestamp</code> → soft deleted. Always nullable — never a boolean flag. The timestamp tells you when it was deleted, which is valuable for audits.</p>
+    </div>
+  </div>
+
+  <!-- ── MANUAL APPROACH ── -->
+  <div class="section">
+    <div class="section-label">03</div>
+    <h2>Manual approach — why middleware is better</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label warn">manual — must remember every time</span></div>
+      <pre><span class="cm">// Soft delete manually</span>
+<span class="kw">async function</span> <span class="fn">softDeleteUser</span>(id: <span class="type">string</span>) {
+  <span class="kw">return</span> prisma.userBlog.<span class="fn">update</span>({
+    where: { id },
+    data: { deletedAt: <span class="kw">new</span> <span class="type">Date</span>() }
+  })
+}
+
+<span class="cm">// Query — must add filter EVERY TIME — miss it once = deleted records appear</span>
+<span class="kw">async function</span> <span class="fn">getActiveUsers</span>() {
+  <span class="kw">return</span> prisma.userBlog.<span class="fn">findMany</span>({
+    where: { deletedAt: <span class="kw">null</span> }  <span class="cm">// ← must remember this everywhere</span>
+  })
+}</pre>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">The problem</div>
+      <p>With the manual approach — every developer on the team must remember <code>where: &#123; deletedAt: null &#125;</code> on every query. Miss it once and soft-deleted records appear in the UI. Middleware solves this by applying the filter automatically everywhere.</p>
+    </div>
+  </div>
+
+  <!-- ── MIDDLEWARE ── -->
+  <div class="section">
+    <div class="section-label">04</div>
+    <h2>$use() middleware — how it works</h2>
+
+    <div class="params-grid">
+      <div class="param-card">
+        <h4>params.model</h4>
+        <p>"UserBlog", "Post", "AuditLog" — which model is being queried</p>
+      </div>
+      <div class="param-card">
+        <h4>params.action</h4>
+        <p>"create", "update", "delete", "findMany" — which operation</p>
+      </div>
+      <div class="param-card">
+        <h4>params.args</h4>
+        <p>The actual query args — where, data, include, select</p>
+      </div>
+    </div>
+
+    <div class="middleware-flow">
+      <div class="middleware-step">
+        <span class="middleware-badge before">before</span>
+        <span class="middleware-text">Intercept query → inspect <span>params.model</span> and <span>params.action</span> → modify if needed</span>
+      </div>
+      <div class="middleware-step">
+        <span class="middleware-badge execute">execute</span>
+        <span class="middleware-text"><span>await next(params)</span> → actual DB query runs here → returns result</span>
+      </div>
+      <div class="middleware-step">
+        <span class="middleware-badge after">after</span>
+        <span class="middleware-text">Use result → write audit log → any post-query logic</span>
+      </div>
+      <div class="middleware-step">
+        <span class="middleware-badge return">return</span>
+        <span class="middleware-text"><span>return result</span> → caller gets original query result — must not forget this</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SOFT DELETE MIDDLEWARE ── -->
+  <div class="section">
+    <div class="section-label">05</div>
+    <h2>Soft delete middleware</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">global soft delete — write once, applies everywhere</span></div>
+      <pre>prisma.<span class="fn">$use</span>(<span class="kw">async</span> (params, next) => {
+
+  <span class="kw">if</span> ([<span class="str">'UserBlog'</span>, <span class="str">'Post'</span>].<span class="fn">includes</span>(params.model ?? <span class="str">''</span>)) {
+
+    <span class="cm">// Inject deletedAt: null filter on all reads</span>
+    <span class="kw">if</span> (params.action === <span class="str">'findMany'</span> || params.action === <span class="str">'findFirst'</span>) {
+      params.args.where = {
+        ...params.args.where,
+        deletedAt: <span class="kw">null</span>
+      }
+    }
+
+    <span class="cm">// Convert delete → update (set deletedAt)</span>
+    <span class="kw">if</span> (params.action === <span class="str">'delete'</span>) {
+      params.action = <span class="str">'update'</span>
+      params.args.data = { deletedAt: <span class="kw">new</span> <span class="type">Date</span>() }
+    }
+
+    <span class="cm">// Convert deleteMany → updateMany</span>
+    <span class="kw">if</span> (params.action === <span class="str">'deleteMany'</span>) {
+      params.action = <span class="str">'updateMany'</span>
+      params.args.data = { deletedAt: <span class="kw">new</span> <span class="type">Date</span>() }
+    }
+  }
+
+  <span class="kw">return</span> <span class="fn">next</span>(params)
+})</pre>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">What this gives you</div>
+      <p>Now <code>prisma.userBlog.findMany()</code> automatically excludes deleted records. <code>prisma.userBlog.delete()</code> automatically sets <code>deletedAt</code> instead of hard deleting. No developer needs to remember anything.</p>
+    </div>
+  </div>
+
+  <!-- ── AUDIT MIDDLEWARE ── -->
+  <div class="section">
+    <div class="section-label">06</div>
+    <h2>Audit log middleware — explained line by line</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">audit log middleware</span></div>
+      <pre>prisma.<span class="fn">$use</span>(<span class="kw">async</span> (params, next) => {
+  <span class="kw">const</span> writeActions = [<span class="str">'create'</span>, <span class="str">'update'</span>, <span class="str">'updateMany'</span>, <span class="str">'delete'</span>, <span class="str">'deleteMany'</span>]
+
+  <span class="kw">if</span> (writeActions.<span class="fn">includes</span>(params.action)) {
+
+    <span class="cm">// Capture BEFORE state — only for update and delete</span>
+    <span class="cm">// create has no before — record doesn't exist yet</span>
+    <span class="kw">let</span> before = <span class="kw">null</span>
+    <span class="kw">if</span> ([<span class="str">'update'</span>, <span class="str">'delete'</span>].<span class="fn">includes</span>(params.action) && params.args.where) {
+      <span class="kw">const</span> modelName = params.model!.<span class="fn">charAt</span>(<span class="num">0</span>).<span class="fn">toLowerCase</span>() + params.model!.<span class="fn">slice</span>(<span class="num">1</span>)
+      before = <span class="kw">await</span> (prisma <span class="kw">as any</span>)[modelName].<span class="fn">findUnique</span>({
+        where: params.args.where
+      })
+    }
+
+    <span class="cm">// Execute the actual query</span>
+    <span class="kw">const</span> result = <span class="kw">await</span> <span class="fn">next</span>(params)
+
+    <span class="cm">// Write audit log AFTER query succeeds</span>
+    <span class="kw">await</span> prisma.auditLog.<span class="fn">create</span>({
+      data: {
+        model: params.model ?? <span class="str">'Unknown'</span>,
+        recordId: result?.id ?? params.args.where?.id ?? <span class="str">'unknown'</span>,
+        action: params.action.<span class="fn">toUpperCase</span>(),
+        before: before ?? <span class="kw">undefined</span>,
+        after: result ?? <span class="kw">undefined</span>,
+      }
+    })
+
+    <span class="kw">return</span> result  <span class="cm">// must return — otherwise caller gets undefined</span>
+  }
+
+  <span class="kw">return</span> <span class="fn">next</span>(params)  <span class="cm">// reads — pass through unchanged</span>
+})</pre>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Field</th><th>Value</th><th>Why</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>before</td>
+            <td class="desc">State captured before query</td>
+            <td class="desc">null for creates — record didn't exist. Populated for update/delete.</td>
+          </tr>
+          <tr>
+            <td>after</td>
+            <td class="desc">result from next()</td>
+            <td class="desc">null for deletes — record is gone. Populated for create/update.</td>
+          </tr>
+          <tr>
+            <td>recordId</td>
+            <td class="desc">result?.id ?? where?.id</td>
+            <td class="desc">Three fallbacks — result.id for create/update, where.id for delete</td>
+          </tr>
+          <tr>
+            <td>action</td>
+            <td class="desc">params.action.toUpperCase()</td>
+            <td class="desc">CREATE / UPDATE / DELETE — uppercase for readability</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── DYNAMIC PROPERTY ACCESS ── -->
+  <div class="section">
+    <div class="section-label">07</div>
+    <h2>Dynamic property access — why (prisma as any)</h2>
+
+    <p>Inside middleware, the model name is a dynamic string from <code>params.model</code>. TypeScript can't verify a dynamic string is a valid key on PrismaClient — so it throws an error.</p>
+
+    <div class="dynamic-access">
+      <div class="access-row">
+        <span class="access-icon good">GOOD</span>
+        <span class="access-text"><span>prisma.userBlog</span> — TypeScript knows the type, fully safe</span>
+      </div>
+      <div class="access-row">
+        <span class="access-icon good">GOOD</span>
+        <span class="access-text"><span>prisma['userBlog']</span> — TypeScript can verify the literal string key, safe</span>
+      </div>
+      <div class="access-row">
+        <span class="access-icon bad">ERROR</span>
+        <span class="access-text"><span>prisma[dynamicString]</span> — TypeScript can't verify at compile time → error</span>
+      </div>
+      <div class="access-row">
+        <span class="access-icon ok">FIX</span>
+        <span class="access-text"><span>(prisma as any)[dynamicString]</span> — opts out of type check, works at runtime</span>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">converting model name to client key</span></div>
+      <pre><span class="cm">// params.model = "UserBlog"</span>
+<span class="cm">// Prisma client key = "userBlog" (first letter lowercase)</span>
+
+<span class="kw">const</span> modelName = params.model!.<span class="fn">charAt</span>(<span class="num">0</span>).<span class="fn">toLowerCase</span>() + params.model!.<span class="fn">slice</span>(<span class="num">1</span>)
+<span class="cm">// "UserBlog" → "u" + "serBlog" → "userBlog" ✓</span>
+<span class="cm">// "Post"     → "p" + "ost"     → "post"     ✓</span>
+
+<span class="cm">// Then use as any to bypass TypeScript's static check</span>
+<span class="kw">const</span> record = <span class="kw">await</span> (prisma <span class="kw">as any</span>)[modelName].<span class="fn">findUnique</span>({ where: ... })</pre>
+    </div>
+
+    <div class="callout rule">
+      <div class="callout-label">One line summary</div>
+      <p><code>prisma.userBlog</code> = static key, TypeScript happy. <code>prisma[dynamicString]</code> = dynamic key, TypeScript throws. <code>(prisma as any)[dynamicString]</code> = skip type check, works at runtime. Only use <code>as any</code> when you genuinely need dynamic access.</p>
+    </div>
+  </div>
+
+  <!-- ── COMBINED MIDDLEWARE ── -->
+  <div class="section">
+    <div class="section-label">08</div>
+    <h2>Combined middleware — production pattern</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">soft delete + audit in one middleware</span></div>
+      <pre>prisma.<span class="fn">$use</span>(<span class="kw">async</span> (params, next) => {
+
+  <span class="cm">// ── SOFT DELETE INTERCEPT ──</span>
+  <span class="kw">if</span> ([<span class="str">'UserBlog'</span>, <span class="str">'Post'</span>].<span class="fn">includes</span>(params.model ?? <span class="str">''</span>)) {
+    <span class="kw">if</span> (params.action === <span class="str">'findMany'</span> || params.action === <span class="str">'findFirst'</span>) {
+      params.args.where = { ...params.args.where, deletedAt: <span class="kw">null</span> }
+    }
+    <span class="kw">if</span> (params.action === <span class="str">'delete'</span>) {
+      params.action = <span class="str">'update'</span>
+      params.args.data = { deletedAt: <span class="kw">new</span> <span class="type">Date</span>() }
+    }
+    <span class="kw">if</span> (params.action === <span class="str">'deleteMany'</span>) {
+      params.action = <span class="str">'updateMany'</span>
+      params.args.data = { deletedAt: <span class="kw">new</span> <span class="type">Date</span>() }
+    }
+  }
+
+  <span class="cm">// ── AUDIT LOG ──</span>
+  <span class="kw">const</span> writeActions = [<span class="str">'create'</span>, <span class="str">'update'</span>, <span class="str">'updateMany'</span>, <span class="str">'delete'</span>, <span class="str">'deleteMany'</span>]
+  <span class="kw">let</span> before = <span class="kw">null</span>
+
+  <span class="kw">if</span> (writeActions.<span class="fn">includes</span>(params.action) && params.args?.where?.id) {
+    <span class="kw">const</span> modelName = params.model!.<span class="fn">charAt</span>(<span class="num">0</span>).<span class="fn">toLowerCase</span>() + params.model!.<span class="fn">slice</span>(<span class="num">1</span>)
+    before = <span class="kw">await</span> (prisma <span class="kw">as any</span>)[modelName].<span class="fn">findUnique</span>({
+      where: { id: params.args.where.id }
+    })
+  }
+
+  <span class="cm">// Execute query</span>
+  <span class="kw">const</span> result = <span class="kw">await</span> <span class="fn">next</span>(params)
+
+  <span class="cm">// Write audit log for writes only</span>
+  <span class="kw">if</span> (writeActions.<span class="fn">includes</span>(params.action)) {
+    <span class="kw">await</span> prisma.auditLog.<span class="fn">create</span>({
+      data: {
+        model: params.model ?? <span class="str">'Unknown'</span>,
+        recordId: result?.id ?? <span class="str">'unknown'</span>,
+        action: params.action.<span class="fn">toUpperCase</span>(),
+        before: before ?? <span class="kw">undefined</span>,
+        after: result ?? <span class="kw">undefined</span>,
+      }
+    })
+  }
+
+  <span class="kw">return</span> result
+})</pre>
+    </div>
+  </div>
+
+  <!-- ── RECOVER ── -->
+  <div class="section">
+    <div class="section-label">09</div>
+    <h2>Recovering a soft-deleted record</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">find deleted + restore</span></div>
+      <pre><span class="cm">// Find soft-deleted records — bypass middleware filter</span>
+<span class="kw">const</span> deleted = <span class="kw">await</span> prisma.userBlog.<span class="fn">findFirst</span>({
+  where: {
+    id: <span class="str">'user-123'</span>,
+    deletedAt: { not: <span class="kw">null</span> }  <span class="cm">// only deleted records</span>
+  }
+})
+
+<span class="cm">// Restore — set deletedAt back to null</span>
+<span class="kw">await</span> prisma.userBlog.<span class="fn">update</span>({
+  where: { id: <span class="str">'user-123'</span> },
+  data: { deletedAt: <span class="kw">null</span> }
+})</pre>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">Middleware conflict on restore</div>
+      <p>The soft-delete middleware injects <code>deletedAt: null</code> on findMany/findFirst — so it will never find deleted records. Use <code>findFirst</code> with explicit <code>deletedAt: &#123; not: null &#125;</code> to bypass. The middleware only injects when <code>deletedAt</code> is not already in the where clause.</p>
+    </div>
+  </div>
+
+  <!-- ── INTERVIEW ANSWERS ── -->
+  <div class="section">
+    <div class="section-label">10</div>
+    <h2>Interview answers</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">text</span><span class="code-label warn">"how do you implement soft deletes in Prisma?"</span></div>
+      <pre><span class="str">"Add a nullable deletedAt DateTime field to the model.</span>
+<span class="str">Use $use() middleware to intercept all queries globally —</span>
+<span class="str">findMany and findFirst get deletedAt: null injected automatically,</span>
+<span class="str">delete and deleteMany get converted to update operations</span>
+<span class="str">that set deletedAt to the current timestamp.</span>
+<span class="str">Developers never need to remember the filter — applied everywhere."</span></pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">text</span><span class="code-label warn">"how do you implement audit logging in Prisma?"</span></div>
+      <pre><span class="str">"Another $use() middleware that captures the before state</span>
+<span class="str">with a findUnique before any write operation, executes the query</span>
+<span class="str">via next(params), then writes to an AuditLog table with the</span>
+<span class="str">model name, record id, action, before and after states.</span>
+<span class="str">Both middlewares run together — soft delete intercept first,</span>
+<span class="str">then audit log captures the converted operation."</span></pre>
+    </div>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">11</div>
+    <h2>Day 13 summary</h2>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h4>deletedAt</h4>
+        <p>Nullable DateTime. null = active, timestamp = deleted. Never use a boolean flag.</p>
+      </div>
+      <div class="summary-card">
+        <h4>$use() middleware</h4>
+        <p>Intercepts every query. params has model, action, args. next() executes the query.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Global filter</h4>
+        <p>Inject deletedAt: null on findMany/findFirst. Convert delete → update with deletedAt = now().</p>
+      </div>
+      <div class="summary-card">
+        <h4>Audit log</h4>
+        <p>Capture before state before next(). Capture after state from result. Write AuditLog entry.</p>
+      </div>
+      <div class="summary-card">
+        <h4>(prisma as any)</h4>
+        <p>Dynamic model name from params.model. TypeScript can't verify dynamic string keys — use as any.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Restore</h4>
+        <p>findFirst with deletedAt: &#123; not: null &#125;. Update with deletedAt: null to restore.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Prisma Study Plan · April 2025 · Anil</p>
+  <span class="next-day">Day 14 → Consolidation — repo layer from scratch</span>
+</footer>
+
+</body>
+</html>

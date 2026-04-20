@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prisma Day 5 — Filtering + Operators</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Fraunces:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: #2a2a2a;
+    --accent: #5DCAA5;
+    --accent2: #7F77DD;
+    --warn: #EF9F27;
+    --danger: #E24B4A;
+    --blue: #85B7EB;
+    --text: #e8e8e2;
+    --muted: #888880;
+    --faint: #444440;
+    --mono: 'JetBrains Mono', monospace;
+    --serif: 'Fraunces', serif;
+    --sans: 'DM Sans', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.7; }
+
+  header { border-bottom: 1px solid var(--border); padding: 48px 60px 40px; position: relative; overflow: hidden; }
+  header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 300px; height: 300px; background: radial-gradient(circle, rgba(239,159,39,0.07) 0%, transparent 70%); pointer-events: none; }
+  .header-tag { font-family: var(--mono); font-size: 11px; color: var(--warn); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  header h1 { font-family: var(--serif); font-size: 36px; font-weight: 600; color: #fff; line-height: 1.2; margin-bottom: 8px; }
+  header h1 em { font-style: italic; color: var(--warn); }
+  header p { font-size: 14px; color: var(--muted); max-width: 560px; }
+  .header-meta { display: flex; gap: 24px; margin-top: 24px; flex-wrap: wrap; }
+  .meta-chip { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); padding: 4px 12px; border-radius: 20px; }
+  .meta-chip span { color: var(--text); }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 48px 60px 80px; }
+
+  .section { margin-bottom: 52px; }
+  .section-label { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--warn); margin-bottom: 6px; }
+  .section h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
+  p { color: var(--text); margin-bottom: 12px; line-height: 1.75; }
+  p:last-child { margin-bottom: 0; }
+
+  .code-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 16px 0; overflow: hidden; }
+  .code-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .code-lang { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .code-label { font-family: var(--mono); font-size: 10px; color: var(--warn); }
+  pre { padding: 20px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; color: var(--text); }
+  .kw { color: #7F77DD; }
+  .str { color: #5DCAA5; }
+  .cm { color: #555550; font-style: italic; }
+  .dec { color: #EF9F27; }
+  .type { color: #85B7EB; }
+  .num { color: #F0997B; }
+  .fn { color: #e8e8e2; }
+  .prop { color: #D4537E; }
+
+  code { font-family: var(--mono); font-size: 12px; background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--accent); }
+
+  .callout { border-left: 3px solid; border-radius: 0 6px 6px 0; padding: 14px 18px; margin: 16px 0; }
+  .callout-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+  .callout p { margin: 0; font-size: 13px; }
+  .callout.interview { border-color: var(--warn); background: rgba(239,159,39,0.06); }
+  .callout.interview .callout-label { color: var(--warn); }
+  .callout.gotcha { border-color: var(--danger); background: rgba(226,75,74,0.06); }
+  .callout.gotcha .callout-label { color: var(--danger); }
+  .callout.tip { border-color: var(--accent); background: rgba(93,202,165,0.06); }
+  .callout.tip .callout-label { color: var(--accent); }
+  .callout.rule { border-color: var(--accent2); background: rgba(127,119,221,0.06); }
+  .callout.rule .callout-label { color: var(--accent2); }
+
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); padding: 10px 14px; text-align: left; font-weight: 400; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  td.desc { color: var(--muted); font-size: 13px; }
+  td.sql { font-family: var(--mono); font-size: 11px; color: var(--accent2); }
+
+  .op-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin: 16px 0; }
+  .op-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .op-card h4 { font-family: var(--mono); font-size: 11px; color: var(--warn); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .op-card ul { list-style: none; padding: 0; }
+  .op-card ul li { font-family: var(--mono); font-size: 12px; color: var(--muted); padding: 3px 0; border-bottom: 1px solid var(--faint); }
+  .op-card ul li:last-child { border-bottom: none; }
+  .op-card ul li span { color: var(--text); }
+
+  .relation-ops { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0; }
+  .rel-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center; }
+  .rel-card .op-name { font-family: var(--mono); font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .rel-card.some .op-name { color: var(--accent); }
+  .rel-card.every .op-name { color: var(--accent2); }
+  .rel-card.none .op-name { color: var(--danger); }
+  .rel-card p { font-size: 12px; color: var(--muted); margin: 0; }
+
+  .mistakes-list { list-style: none; padding: 0; }
+  .mistakes-list li { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); align-items: flex-start; }
+  .mistakes-list li:last-child { border-bottom: none; }
+  .mistake-num { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--danger); background: rgba(226,75,74,0.1); width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .mistake-body h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .mistake-body p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; border-top: 2px solid var(--warn); }
+  .summary-card h4 { font-family: var(--mono); font-size: 11px; color: var(--warn); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .summary-card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  footer { border-top: 1px solid var(--border); padding: 24px 60px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  footer p { font-family: var(--mono); font-size: 11px; color: var(--faint); margin: 0; }
+  .next-day { font-family: var(--mono); font-size: 11px; color: var(--accent); background: rgba(93,202,165,0.08); border: 1px solid rgba(93,202,165,0.2); padding: 6px 14px; border-radius: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">Prisma Study Plan · April 2025</div>
+  <h1>Day 5 — <em>Filtering + Operators</em></h1>
+  <p>Basic operators · string filters · AND/OR/NOT · relation filters: some, every, none</p>
+  <div class="header-meta">
+    <div class="meta-chip">Phase <span>2 of 5</span></div>
+    <div class="meta-chip">Date <span>Mon Apr 7</span></div>
+    <div class="meta-chip">Stack <span>Prisma 5 · TS · Neon</span></div>
+    <div class="meta-chip">Status <span style="color:#5DCAA5">✓ Complete</span></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── OPERATOR OVERVIEW ── -->
+  <div class="section">
+    <div class="section-label">01</div>
+    <h2>Operator overview</h2>
+
+    <div class="op-grid">
+      <div class="op-card">
+        <h4>Equality</h4>
+        <ul>
+          <li><span>equals</span> (default)</li>
+          <li><span>not</span></li>
+          <li><span>in</span></li>
+          <li><span>notIn</span></li>
+        </ul>
+      </div>
+      <div class="op-card">
+        <h4>Comparison</h4>
+        <ul>
+          <li><span>lt</span> — less than</li>
+          <li><span>lte</span> — less or equal</li>
+          <li><span>gt</span> — greater than</li>
+          <li><span>gte</span> — greater or equal</li>
+        </ul>
+      </div>
+      <div class="op-card">
+        <h4>String</h4>
+        <ul>
+          <li><span>contains</span></li>
+          <li><span>startsWith</span></li>
+          <li><span>endsWith</span></li>
+          <li><span>mode: 'insensitive'</span></li>
+        </ul>
+      </div>
+      <div class="op-card">
+        <h4>Composition</h4>
+        <ul>
+          <li><span>AND</span></li>
+          <li><span>OR</span></li>
+          <li><span>NOT</span></li>
+        </ul>
+      </div>
+      <div class="op-card">
+        <h4>Relations</h4>
+        <ul>
+          <li><span>some</span></li>
+          <li><span>every</span></li>
+          <li><span>none</span></li>
+          <li><span>is / isNot</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── BASIC OPERATORS ── -->
+  <div class="section">
+    <div class="section-label">02</div>
+    <h2>Basic operators</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Operator</th><th>SQL equivalent</th><th>Example</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>equals (default)</td>
+            <td class="sql">= value</td>
+            <td class="desc"><code>published: true</code></td>
+          </tr>
+          <tr>
+            <td>not</td>
+            <td class="sql">!= value</td>
+            <td class="desc"><code>published: &#123; not: true &#125;</code></td>
+          </tr>
+          <tr>
+            <td>in</td>
+            <td class="sql">IN (a, b, c)</td>
+            <td class="desc"><code>email: &#123; in: ['a@x.com', 'b@x.com'] &#125;</code></td>
+          </tr>
+          <tr>
+            <td>notIn</td>
+            <td class="sql">NOT IN (a, b)</td>
+            <td class="desc"><code>email: &#123; notIn: ['spam@x.com'] &#125;</code></td>
+          </tr>
+          <tr>
+            <td>lt / lte / gt / gte</td>
+            <td class="sql">&lt; &lt;= &gt; &gt;=</td>
+            <td class="desc"><code>age: &#123; gte: 18, lte: 60 &#125;</code></td>
+          </tr>
+          <tr>
+            <td>null check</td>
+            <td class="sql">IS NULL</td>
+            <td class="desc"><code>name: null</code></td>
+          </tr>
+          <tr>
+            <td>not null</td>
+            <td class="sql">IS NOT NULL</td>
+            <td class="desc"><code>name: &#123; not: null &#125;</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">basic operators</span></div>
+      <pre><span class="cm">// equals — default, no operator needed</span>
+<span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({ where: { published: <span class="kw">true</span> } })
+
+<span class="cm">// in — match any value in array</span>
+<span class="kw">await</span> prisma.user.<span class="fn">findMany</span>({
+  where: { email: { in: [<span class="str">'a@test.com'</span>, <span class="str">'b@test.com'</span>] } }
+})
+
+<span class="cm">// range — age between 18 and 60</span>
+<span class="kw">await</span> prisma.user.<span class="fn">findMany</span>({
+  where: { age: { gte: <span class="num">18</span>, lte: <span class="num">60</span> } }
+})
+
+<span class="cm">// null check</span>
+<span class="kw">await</span> prisma.user.<span class="fn">findMany</span>({ where: { name: <span class="kw">null</span> } })        <span class="cm">// IS NULL</span>
+<span class="kw">await</span> prisma.user.<span class="fn">findMany</span>({ where: { name: { not: <span class="kw">null</span> } } }) <span class="cm">// IS NOT NULL</span></pre>
+    </div>
+  </div>
+
+  <!-- ── STRING OPERATORS ── -->
+  <div class="section">
+    <div class="section-label">03</div>
+    <h2>String operators</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">contains · startsWith · endsWith</span></div>
+      <pre><span class="cm">// contains — LIKE %value% — anywhere in string</span>
+<span class="kw">await</span> prisma.user.<span class="fn">findMany</span>({
+  where: { name: { contains: <span class="str">'anil'</span> } }
+})
+
+<span class="cm">// case insensitive — add mode: 'insensitive'</span>
+<span class="kw">await</span> prisma.user.<span class="fn">findMany</span>({
+  where: { name: { contains: <span class="str">'anil'</span>, mode: <span class="str">'insensitive'</span> } }
+})
+
+<span class="cm">// startsWith — LIKE value%</span>
+<span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+  where: { title: { startsWith: <span class="str">'How to'</span> } }
+})
+
+<span class="cm">// endsWith — LIKE %value</span>
+<span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+  where: { title: { endsWith: <span class="str">'2025'</span> } }
+})</pre>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">Always use mode insensitive for user-facing search</div>
+      <p>Without <code>mode: 'insensitive'</code>, searching "Prisma" won't find "prisma". In user-facing search, always add it. Note: insensitive mode uses <code>ILIKE</code> in Postgres which can't use standard B-tree indexes — add a GIN index for large datasets.</p>
+    </div>
+  </div>
+
+  <!-- ── AND OR NOT ── -->
+  <div class="section">
+    <div class="section-label">04</div>
+    <h2>AND / OR / NOT composition</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">composing conditions</span></div>
+      <pre><span class="cm">// AND — implicit when you pass multiple fields</span>
+<span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+  where: { published: <span class="kw">true</span>, userId: <span class="str">'user-123'</span> }  <span class="cm">// AND is implicit</span>
+})
+
+<span class="cm">// explicit AND array</span>
+<span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+  where: {
+    AND: [
+      { published: <span class="kw">true</span> },
+      { title: { contains: <span class="str">'prisma'</span> } }
+    ]
+  }
+})
+
+<span class="cm">// OR — any condition matches</span>
+<span class="kw">await</span> prisma.user.<span class="fn">findMany</span>({
+  where: {
+    OR: [
+      { email: { contains: <span class="str">'@gmail.com'</span> } },
+      { email: { contains: <span class="str">'@yahoo.com'</span> } }
+    ]
+  }
+})
+
+<span class="cm">// NOT — exclude matches</span>
+<span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+  where: { NOT: { published: <span class="kw">true</span> } }
+})
+
+<span class="cm">// Combining AND + OR — most common real-world pattern</span>
+<span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+  where: {
+    AND: [
+      { published: <span class="kw">true</span> },
+      {
+        OR: [
+          { title: { startsWith: <span class="str">'How'</span> } },
+          { content: { contains: <span class="str">'typescript'</span> } }
+        ]
+      }
+    ]
+  }
+})</pre>
+    </div>
+
+    <div class="callout rule">
+      <div class="callout-label">AND is implicit</div>
+      <p>When you pass multiple fields at the same level, Prisma treats them as AND automatically. You only need the explicit <code>AND: []</code> array syntax when combining with OR — to control precedence.</p>
+    </div>
+  </div>
+
+  <!-- ── RELATION FILTERS ── -->
+  <div class="section">
+    <div class="section-label">05</div>
+    <h2>Relation filters — some, every, none</h2>
+
+    <p>Filter the <strong>parent</strong> based on conditions on its <strong>children</strong>. These are the most powerful and most commonly misunderstood filters.</p>
+
+    <div class="relation-ops">
+      <div class="rel-card some">
+        <div class="op-name">some</div>
+        <p>At least one child matches the condition</p>
+      </div>
+      <div class="rel-card every">
+        <div class="op-name">every</div>
+        <p>All children match the condition</p>
+      </div>
+      <div class="rel-card none">
+        <div class="op-name">none</div>
+        <p>Zero children match the condition</p>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">some · every · none · is · isNot</span></div>
+      <pre><span class="cm">// some — at least one child matches</span>
+<span class="cm">// "users who have at least one published post"</span>
+<span class="kw">await</span> prisma.user.<span class="fn">findMany</span>({
+  where: { posts: { some: { published: <span class="kw">true</span> } } }
+})
+
+<span class="cm">// some: {} — empty condition = at least one exists</span>
+<span class="cm">// "users who have at least one post (any post)"</span>
+<span class="kw">await</span> prisma.user.<span class="fn">findMany</span>({
+  where: { posts: { some: {} } }
+})
+
+<span class="cm">// every — ALL children match</span>
+<span class="cm">// "users where ALL their posts are published"</span>
+<span class="kw">await</span> prisma.user.<span class="fn">findMany</span>({
+  where: { posts: { every: { published: <span class="kw">true</span> } } }
+})
+
+<span class="cm">// none — zero children match</span>
+<span class="cm">// "users who have NO posts at all"</span>
+<span class="kw">await</span> prisma.user.<span class="fn">findMany</span>({
+  where: { posts: { none: {} } }
+})
+
+<span class="cm">// is / isNot — for nullable single relations (1:1)</span>
+<span class="cm">// "posts where the author has been deleted"</span>
+<span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+  where: { user: { is: <span class="kw">null</span> } }
+})</pre>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">some/none vs is/isNot — don't mix them up</div>
+      <p><code>some</code> / <code>every</code> / <code>none</code> are for <strong>array relations</strong> (1:N, M:N) — like <code>posts</code>, <code>comments</code>. <code>is</code> / <code>isNot</code> are for <strong>nullable single relations</strong> (1:1) — like a nullable <code>profile</code>. Using <code>is: null</code> on an array relation throws a type error.</p>
+    </div>
+
+    <div class="callout interview">
+      <div class="callout-label">Interview angle</div>
+      <p>"How do you find all users who have no comments?" — <code>where: &#123; comments: &#123; none: &#123;&#125; &#125; &#125;</code>. The empty <code>&#123;&#125;</code> means "any record" — so <code>none: &#123;&#125;</code> means "no records exist at all".</p>
+    </div>
+  </div>
+
+  <!-- ── DATE FILTERING ── -->
+  <div class="section">
+    <div class="section-label">06</div>
+    <h2>Date filtering</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">filtering by date range</span></div>
+      <pre><span class="cm">// Last 7 days — use gte not gt</span>
+<span class="kw">const</span> sevenDaysAgo = <span class="kw">new</span> <span class="type">Date</span>()
+sevenDaysAgo.<span class="fn">setDate</span>(sevenDaysAgo.<span class="fn">getDate</span>() - <span class="num">7</span>)
+
+<span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+  where: { createdAt: { gte: sevenDaysAgo } },  <span class="cm">// gte includes boundary</span>
+  orderBy: { createdAt: <span class="str">'desc'</span> }
+})
+
+<span class="cm">// Between two dates</span>
+<span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+  where: {
+    createdAt: {
+      gte: <span class="kw">new</span> <span class="type">Date</span>(<span class="str">'2025-04-01'</span>),
+      lte: <span class="kw">new</span> <span class="type">Date</span>(<span class="str">'2025-04-30'</span>)
+    }
+  }
+})</pre>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">gt vs gte on date ranges</div>
+      <p><code>gt</code> (greater than) excludes the boundary — posts created exactly at midnight 7 days ago would be excluded. <code>gte</code> (greater than or equal) includes it. For "last N days" queries, always use <code>gte</code>.</p>
+    </div>
+  </div>
+
+  <!-- ── REAL WORLD QUERY ── -->
+  <div class="section">
+    <div class="section-label">07</div>
+    <h2>Real world fintech query</h2>
+
+    <p>Combining everything — active users with at least one completed transaction over ₹10,000 in the last 30 days:</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">complex nested filter</span></div>
+      <pre><span class="kw">const</span> thirtyDaysAgo = <span class="kw">new</span> <span class="type">Date</span>()
+thirtyDaysAgo.<span class="fn">setDate</span>(thirtyDaysAgo.<span class="fn">getDate</span>() - <span class="num">30</span>)
+
+<span class="kw">const</span> users = <span class="kw">await</span> prisma.user.<span class="fn">findMany</span>({
+  where: {
+    AND: [
+      { isActive: <span class="kw">true</span> },
+      {
+        accounts: {
+          some: {
+            transactions: {
+              some: {
+                AND: [
+                  { amount: { gte: <span class="num">10000</span> } },
+                  { status: <span class="str">'COMPLETED'</span> },
+                  { createdAt: { gte: thirtyDaysAgo } }
+                ]
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  include: {
+    accounts: {
+      include: { transactions: <span class="kw">true</span> }
+    }
+  }
+})</pre>
+    </div>
+  </div>
+
+  <!-- ── PRACTICE EXERCISE ── -->
+  <div class="section">
+    <div class="section-label">08</div>
+    <h2>Practice exercise — corrected solutions</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">all 5 queries — correct versions</span></div>
+      <pre><span class="cm">// Q1 — published posts with "prisma" in title (case insensitive)</span>
+<span class="kw">const</span> publishedPostWithPrisma = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+  where: {
+    AND: [
+      { published: <span class="kw">true</span> },
+      { title: { contains: <span class="str">'prisma'</span>, mode: <span class="str">'insensitive'</span> } }
+    ]
+  }
+})
+
+<span class="cm">// Q2 — users with at least one post</span>
+<span class="kw">const</span> usersWithAtLeastOnePost = <span class="kw">await</span> prisma.user.<span class="fn">findMany</span>({
+  where: { posts: { some: {} } }  <span class="cm">// some: {} = at least one exists</span>
+})
+
+<span class="cm">// Q3 — users with no comments</span>
+<span class="kw">const</span> usersWithNoComments = <span class="kw">await</span> prisma.user.<span class="fn">findMany</span>({
+  where: { comments: { none: {} } }  <span class="cm">// none: {} = zero exist</span>
+})
+
+<span class="cm">// Q4 — posts from last 7 days, latest first</span>
+<span class="kw">const</span> sevenDaysAgo = <span class="kw">new</span> <span class="type">Date</span>()
+sevenDaysAgo.<span class="fn">setDate</span>(sevenDaysAgo.<span class="fn">getDate</span>() - <span class="num">7</span>)
+
+<span class="kw">const</span> postsLast7Days = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+  where: { createdAt: { gte: sevenDaysAgo } },
+  orderBy: { createdAt: <span class="str">'desc'</span> }
+})
+
+<span class="cm">// Q5 — published AND (starts with "How" OR contains "typescript")</span>
+<span class="kw">const</span> filteredPosts = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+  where: {
+    AND: [
+      { published: <span class="kw">true</span> },
+      {
+        OR: [
+          { title: { startsWith: <span class="str">'How'</span> } },
+          { content: { contains: <span class="str">'typescript'</span> } }
+        ]
+      }
+    ]
+  }
+})</pre>
+    </div>
+  </div>
+
+  <!-- ── MISTAKES ── -->
+  <div class="section">
+    <div class="section-label">09</div>
+    <h2>Mistakes made today</h2>
+
+    <ul class="mistakes-list">
+      <li>
+        <div class="mistake-num">1</div>
+        <div class="mistake-body">
+          <h4><code>prisma.userBlog</code> doesn't exist</h4>
+          <p>Model is <code>User</code> → client method is <code>prisma.user</code>. Prisma generates camelCase methods from the exact model name. Always match exactly.</p>
+        </div>
+      </li>
+      <li>
+        <div class="mistake-num">2</div>
+        <div class="mistake-body">
+          <h4>Incomplete <code>some</code> syntax — <code>posts:</code> with no value</h4>
+          <p>Relation filters need an operator. "At least one post exists" = <code>posts: &#123; some: &#123;&#125; &#125;</code>. The empty <code>&#123;&#125;</code> means "any record" — no condition on the child, just checking existence.</p>
+        </div>
+      </li>
+      <li>
+        <div class="mistake-num">3</div>
+        <div class="mistake-body">
+          <h4>Used <code>is: null</code> on array relation</h4>
+          <p><code>is</code> / <code>isNot</code> are for nullable single (1:1) relations. For array relations like <code>comments</code>, use <code>none: &#123;&#125;</code> to check "zero exist".</p>
+        </div>
+      </li>
+      <li>
+        <div class="mistake-num">4</div>
+        <div class="mistake-body">
+          <h4>Missing sort direction in <code>orderBy</code></h4>
+          <p><code>orderBy: &#123; createdAt &#125;</code> is invalid shorthand. Always specify direction: <code>orderBy: &#123; createdAt: 'desc' &#125;</code>.</p>
+        </div>
+      </li>
+      <li>
+        <div class="mistake-num">5</div>
+        <div class="mistake-body">
+          <h4>Wrong nesting in OR conditions</h4>
+          <p>Each OR condition must be its own object with the field at the top level. <code>title</code> and <code>content</code> are separate fields on Post — not nested inside each other.</p>
+        </div>
+      </li>
+    </ul>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">10</div>
+    <h2>Day 5 summary</h2>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h4>Basic ops</h4>
+        <p>equals, not, in, notIn, lt/lte/gt/gte, null checks</p>
+      </div>
+      <div class="summary-card">
+        <h4>String ops</h4>
+        <p>contains, startsWith, endsWith. Always add mode: 'insensitive' for user search.</p>
+      </div>
+      <div class="summary-card">
+        <h4>AND is implicit</h4>
+        <p>Multiple fields at same level = AND. Only use explicit AND array when combining with OR.</p>
+      </div>
+      <div class="summary-card">
+        <h4>some / every / none</h4>
+        <p>For array relations. Empty {} = "any record". some: {} = at least one exists.</p>
+      </div>
+      <div class="summary-card">
+        <h4>is / isNot</h4>
+        <p>For nullable single (1:1) relations only. Not for array relations.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Date ranges</h4>
+        <p>Use gte not gt for inclusive boundaries. Always pass a Date object, not a string.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Prisma Study Plan · April 2025 · Anil</p>
+  <span class="next-day">Day 6 → N+1 deep dive</span>
+</footer>
+
+</body>
+</html>

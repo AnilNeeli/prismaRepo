@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prisma Day 8 — Nested Writes + Aggregations</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Fraunces:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: #2a2a2a;
+    --accent: #5DCAA5;
+    --accent2: #7F77DD;
+    --warn: #EF9F27;
+    --danger: #E24B4A;
+    --blue: #85B7EB;
+    --text: #e8e8e2;
+    --muted: #888880;
+    --faint: #444440;
+    --mono: 'JetBrains Mono', monospace;
+    --serif: 'Fraunces', serif;
+    --sans: 'DM Sans', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.7; }
+
+  header { border-bottom: 1px solid var(--border); padding: 48px 60px 40px; position: relative; overflow: hidden; }
+  header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 300px; height: 300px; background: radial-gradient(circle, rgba(127,119,221,0.07) 0%, transparent 70%); pointer-events: none; }
+  .header-tag { font-family: var(--mono); font-size: 11px; color: var(--accent2); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  header h1 { font-family: var(--serif); font-size: 36px; font-weight: 600; color: #fff; line-height: 1.2; margin-bottom: 8px; }
+  header h1 em { font-style: italic; color: var(--accent2); }
+  header p { font-size: 14px; color: var(--muted); max-width: 560px; }
+  .header-meta { display: flex; gap: 24px; margin-top: 24px; flex-wrap: wrap; }
+  .meta-chip { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); padding: 4px 12px; border-radius: 20px; }
+  .meta-chip span { color: var(--text); }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 48px 60px 80px; }
+
+  .section { margin-bottom: 52px; }
+  .section-label { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent2); margin-bottom: 6px; }
+  .section h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
+  p { color: var(--text); margin-bottom: 12px; line-height: 1.75; }
+  p:last-child { margin-bottom: 0; }
+
+  .code-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 16px 0; overflow: hidden; }
+  .code-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .code-lang { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .code-label { font-family: var(--mono); font-size: 10px; color: var(--accent2); }
+  .code-label.good { color: var(--accent); }
+  .code-label.warn { color: var(--warn); }
+  pre { padding: 20px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; color: var(--text); }
+  .kw { color: #7F77DD; }
+  .str { color: #5DCAA5; }
+  .cm { color: #555550; font-style: italic; }
+  .dec { color: #EF9F27; }
+  .type { color: #85B7EB; }
+  .num { color: #F0997B; }
+  .fn { color: #e8e8e2; }
+
+  code { font-family: var(--mono); font-size: 12px; background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--accent); }
+
+  .callout { border-left: 3px solid; border-radius: 0 6px 6px 0; padding: 14px 18px; margin: 16px 0; }
+  .callout-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+  .callout p { margin: 0; font-size: 13px; }
+  .callout.interview { border-color: var(--warn); background: rgba(239,159,39,0.06); }
+  .callout.interview .callout-label { color: var(--warn); }
+  .callout.gotcha { border-color: var(--danger); background: rgba(226,75,74,0.06); }
+  .callout.gotcha .callout-label { color: var(--danger); }
+  .callout.tip { border-color: var(--accent); background: rgba(93,202,165,0.06); }
+  .callout.tip .callout-label { color: var(--accent); }
+  .callout.rule { border-color: var(--accent2); background: rgba(127,119,221,0.06); }
+  .callout.rule .callout-label { color: var(--accent2); }
+
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); padding: 10px 14px; text-align: left; font-weight: 400; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--mono); font-size: 12px; color: var(--accent2); }
+  td.desc { color: var(--muted); font-size: 13px; }
+  td.good { color: var(--accent); font-size: 13px; }
+  td.bad { color: var(--danger); font-size: 13px; }
+
+  .nested-ops { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin: 16px 0; }
+  .nested-op { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; border-top: 2px solid; }
+  .nested-op.connect { border-top-color: #5DCAA5; }
+  .nested-op.create { border-top-color: #7F77DD; }
+  .nested-op.connectorcreate { border-top-color: #EF9F27; }
+  .nested-op.disconnect { border-top-color: #E24B4A; }
+  .nested-op.update { border-top-color: #85B7EB; }
+  .nested-op h4 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .nested-op.connect h4 { color: #5DCAA5; }
+  .nested-op.create h4 { color: #7F77DD; }
+  .nested-op.connectorcreate h4 { color: #EF9F27; }
+  .nested-op.disconnect h4 { color: #E24B4A; }
+  .nested-op.update h4 { color: #85B7EB; }
+  .nested-op p { font-size: 12px; color: var(--muted); margin: 0; }
+
+  .groupby-visual { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin: 16px 0; }
+  .groupby-visual h4 { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+  .groupby-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
+  .groupby-table th { color: var(--muted); padding: 6px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  .groupby-table td { padding: 6px 12px; border-bottom: 1px solid var(--faint); }
+  .groupby-table td:last-child { color: var(--accent2); font-weight: 600; }
+  .groupby-table tr:last-child td { border-bottom: none; }
+  .arrow { text-align: center; font-family: var(--mono); font-size: 20px; color: var(--faint); padding: 8px 0; }
+
+  .mistakes-list { list-style: none; padding: 0; }
+  .mistakes-list li { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); align-items: flex-start; }
+  .mistakes-list li:last-child { border-bottom: none; }
+  .mistake-num { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--danger); background: rgba(226,75,74,0.1); width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .mistake-body h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .mistake-body p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; border-top: 2px solid var(--accent2); }
+  .summary-card h4 { font-family: var(--mono); font-size: 11px; color: var(--accent2); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .summary-card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  footer { border-top: 1px solid var(--border); padding: 24px 60px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  footer p { font-family: var(--mono); font-size: 11px; color: var(--faint); margin: 0; }
+  .next-day { font-family: var(--mono); font-size: 11px; color: var(--accent); background: rgba(93,202,165,0.08); border: 1px solid rgba(93,202,165,0.2); padding: 6px 14px; border-radius: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">Prisma Study Plan · April 2025</div>
+  <h1>Day 8 — <em>Nested Writes + Aggregations</em></h1>
+  <p>connect · create · connectOrCreate · disconnect · count · aggregate · groupBy · having</p>
+  <div class="header-meta">
+    <div class="meta-chip">Phase <span>2 of 5</span></div>
+    <div class="meta-chip">Date <span>Thu Apr 10</span></div>
+    <div class="meta-chip">Stack <span>Prisma 5 · TS · Neon</span></div>
+    <div class="meta-chip">Status <span style="color:#5DCAA5">✓ Complete</span></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── NESTED WRITES OVERVIEW ── -->
+  <div class="section">
+    <div class="section-label">01</div>
+    <h2>Nested write operations</h2>
+
+    <div class="nested-ops">
+      <div class="nested-op connect">
+        <h4>connect</h4>
+        <p>Link to an existing record by id or unique field</p>
+      </div>
+      <div class="nested-op create">
+        <h4>create</h4>
+        <p>Create parent + child together in one call</p>
+      </div>
+      <div class="nested-op connectorcreate">
+        <h4>connectOrCreate</h4>
+        <p>Find existing and connect, or create if not found</p>
+      </div>
+      <div class="nested-op disconnect">
+        <h4>disconnect</h4>
+        <p>Remove relation link without deleting the record</p>
+      </div>
+      <div class="nested-op update">
+        <h4>update nested</h4>
+        <p>Update child while updating parent in one call</p>
+      </div>
+    </div>
+
+    <div class="callout rule">
+      <div class="callout-label">Production rule</div>
+      <p>1 level deep nested write → fine in production. 2+ levels deep → break into separate explicit queries. Deeply nested writes are hard to debug and maintain.</p>
+    </div>
+  </div>
+
+  <!-- ── CONNECT ── -->
+  <div class="section">
+    <div class="section-label">02</div>
+    <h2>connect — link to existing record</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">two ways to connect</span></div>
+      <pre><span class="cm">// Nested connect syntax</span>
+<span class="kw">await</span> prisma.post.<span class="fn">create</span>({
+  data: {
+    title: <span class="str">'My post'</span>,
+    user: { connect: { id: <span class="str">'user-123'</span> } }
+  }
+})
+
+<span class="cm">// Raw FK — simpler, same result</span>
+<span class="kw">await</span> prisma.post.<span class="fn">create</span>({
+  data: {
+    title: <span class="str">'My post'</span>,
+    userId: <span class="str">'user-123'</span>   <span class="cm">// direct FK — use this in real apps</span>
+  }
+})</pre>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">Raw FK is simpler</div>
+      <p>When you already have the id (from a JWT token, URL param, or previous query), just pass the raw FK directly. The nested <code>connect</code> syntax is useful when you only have a unique field like email, not the id.</p>
+    </div>
+  </div>
+
+  <!-- ── CREATE NESTED ── -->
+  <div class="section">
+    <div class="section-label">03</div>
+    <h2>create — parent + children together</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">nested create</span></div>
+      <pre><span class="cm">// Create user + 2 posts in one call</span>
+<span class="kw">await</span> prisma.userBlog.<span class="fn">create</span>({
+  data: {
+    email: <span class="str">'anil@test.com'</span>,
+    name: <span class="str">'Anil'</span>,
+    age: <span class="num">25</span>,
+    posts: {
+      create: [
+        { title: <span class="str">'Post 1'</span> },
+        { title: <span class="str">'Post 2'</span> },
+      ]
+    }
+  }
+})</pre>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">P2002 on re-runs</div>
+      <p>If you run the same nested create twice, the email unique constraint throws <code>P2002</code>. Use a dynamic email or wrap in try/catch during dev. In production, always validate uniqueness before creating.</p>
+    </div>
+  </div>
+
+  <!-- ── CONNECTORCREATE ── -->
+  <div class="section">
+    <div class="section-label">04</div>
+    <h2>connectOrCreate — find or create</h2>
+
+    <p>Use when you want to connect to a record that may or may not exist yet. In production, break complex nested connectOrCreate into explicit steps — easier to read and debug.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">explicit steps — production pattern</span></div>
+      <pre><span class="cm">// Step 1 — find or create the tag</span>
+<span class="kw">const</span> tag = <span class="kw">await</span> prisma.tag.<span class="fn">upsert</span>({
+  where: { name: <span class="str">'typescript'</span> },
+  create: { name: <span class="str">'typescript'</span> },
+  update: {}
+})
+
+<span class="cm">// Step 2 — create the PostTag if it doesn't exist</span>
+<span class="kw">await</span> prisma.postTag.<span class="fn">upsert</span>({
+  where: {
+    postId_tagId: { postId: <span class="str">'post-123'</span>, tagId: tag.id }
+  },
+  create: { postId: <span class="str">'post-123'</span>, tagId: tag.id, taggedBy: <span class="str">'anil@test.com'</span> },
+  update: {}
+})</pre>
+    </div>
+  </div>
+
+  <!-- ── DISCONNECT + UPDATE ── -->
+  <div class="section">
+    <div class="section-label">05</div>
+    <h2>disconnect + nested update</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">disconnect · nested update</span></div>
+      <pre><span class="cm">// disconnect on optional 1:1 — sets FK to null</span>
+<span class="kw">await</span> prisma.userBlog.<span class="fn">update</span>({
+  where: { id: <span class="str">'user-123'</span> },
+  data: { profile: { disconnect: <span class="kw">true</span> } }
+})
+
+<span class="cm">// nested update — update post + author name in one call</span>
+<span class="kw">await</span> prisma.post.<span class="fn">update</span>({
+  where: { id: <span class="str">'post-123'</span> },
+  data: {
+    title: <span class="str">'Updated title'</span>,
+    user: { update: { name: <span class="str">'New Name'</span> } }
+  }
+})</pre>
+    </div>
+  </div>
+
+  <!-- ── COUNT + AGGREGATE ── -->
+  <div class="section">
+    <div class="section-label">06</div>
+    <h2>count + aggregate</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">count · aggregate</span></div>
+      <pre><span class="cm">// count — total records</span>
+<span class="kw">const</span> total = <span class="kw">await</span> prisma.post.<span class="fn">count</span>()
+
+<span class="cm">// count with filter</span>
+<span class="kw">const</span> published = <span class="kw">await</span> prisma.post.<span class="fn">count</span>({
+  where: { published: <span class="kw">true</span> }
+})
+
+<span class="cm">// aggregate — multiple stats in one query</span>
+<span class="kw">const</span> stats = <span class="kw">await</span> prisma.userBlog.<span class="fn">aggregate</span>({
+  _count: { id: <span class="kw">true</span> },   <span class="cm">// total users</span>
+  _avg:   { age: <span class="kw">true</span> },   <span class="cm">// average age</span>
+  _min:   { age: <span class="kw">true</span> },   <span class="cm">// youngest</span>
+  _max:   { age: <span class="kw">true</span> },   <span class="cm">// oldest</span>
+  _sum:   { age: <span class="kw">true</span> },   <span class="cm">// sum of all ages</span>
+})
+console.<span class="fn">log</span>(<span class="str">'Avg age:'</span>, stats._avg.age)
+console.<span class="fn">log</span>(<span class="str">'Total users:'</span>, stats._count.id)</pre>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Aggregation</th><th>SQL equivalent</th><th>Works on</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>_count</td><td class="desc">COUNT(field)</td><td class="desc">Any field</td></tr>
+          <tr><td>_avg</td><td class="desc">AVG(field)</td><td class="desc">Numeric fields only</td></tr>
+          <tr><td>_sum</td><td class="desc">SUM(field)</td><td class="desc">Numeric fields only</td></tr>
+          <tr><td>_min</td><td class="desc">MIN(field)</td><td class="desc">Numeric + DateTime</td></tr>
+          <tr><td>_max</td><td class="desc">MAX(field)</td><td class="desc">Numeric + DateTime</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── GROUPBY ── -->
+  <div class="section">
+    <div class="section-label">07</div>
+    <h2>groupBy — aggregate per group</h2>
+
+    <p>Groups records and runs aggregations per group. The SQL equivalent of <code>GROUP BY</code>.</p>
+
+    <div class="groupby-visual">
+      <h4>What groupBy does — step by step</h4>
+      <table class="groupby-table">
+        <tr><th>userId</th><th>post id</th></tr>
+        <tr><td>uuid-anil</td><td>post-1</td></tr>
+        <tr><td>uuid-anil</td><td>post-2</td></tr>
+        <tr><td>uuid-anil</td><td>post-3</td></tr>
+        <tr><td>uuid-user2</td><td>post-4</td></tr>
+        <tr><td>uuid-user2</td><td>post-5</td></tr>
+      </table>
+      <div class="arrow">↓ groupBy userId + _count id</div>
+      <table class="groupby-table">
+        <tr><th>userId</th><th>count</th></tr>
+        <tr><td>uuid-anil</td><td>3</td></tr>
+        <tr><td>uuid-user2</td><td>2</td></tr>
+      </table>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">groupBy + having</span></div>
+      <pre><span class="cm">// Count posts per user, most posts first</span>
+<span class="kw">const</span> postCounts = <span class="kw">await</span> prisma.post.<span class="fn">groupBy</span>({
+  by: [<span class="str">'userId'</span>],
+  _count: { id: <span class="kw">true</span> },
+  orderBy: { _count: { id: <span class="str">'desc'</span> } }
+})
+
+<span class="cm">// having — filter groups AFTER aggregation</span>
+<span class="cm">// users with 2+ posts only</span>
+<span class="kw">const</span> activeUsers = <span class="kw">await</span> prisma.post.<span class="fn">groupBy</span>({
+  by: [<span class="str">'userId'</span>],
+  _count: { id: <span class="kw">true</span> },
+  having: {
+    id: { _count: { gte: <span class="num">2</span> } }
+  }
+})
+
+<span class="cm">// where + having together</span>
+<span class="cm">// where filters rows BEFORE grouping</span>
+<span class="cm">// having filters groups AFTER aggregation</span>
+<span class="kw">const</span> result = <span class="kw">await</span> prisma.post.<span class="fn">groupBy</span>({
+  by: [<span class="str">'userId'</span>],
+  where: { published: <span class="kw">true</span> },          <span class="cm">// only count published posts</span>
+  _count: { id: <span class="kw">true</span> },
+  having: { id: { _count: { gte: <span class="num">2</span> } } } <span class="cm">// only groups with 2+ published posts</span>
+})</pre>
+    </div>
+
+    <div class="callout interview">
+      <div class="callout-label">where vs having — interview question</div>
+      <p><code>where</code> filters individual rows before grouping. <code>having</code> filters groups after aggregation. Example: <code>where: &#123; published: true &#125;</code> only counts published posts. <code>having: &#123; id: &#123; _count: &#123; gte: 2 &#125; &#125; &#125;</code> only returns groups where the count is 2 or more.</p>
+    </div>
+  </div>
+
+  <!-- ── GROUPBY ORDERBY SYNTAX ── -->
+  <div class="section">
+    <div class="section-label">08</div>
+    <h2>groupBy orderBy — why the extra nesting</h2>
+
+    <p>Normal <code>orderBy</code> sorts by a column. <code>groupBy</code> <code>orderBy</code> sorts by a computed aggregation — so it needs one extra level to specify which aggregation and which field:</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">normal vs groupBy orderBy</span></div>
+      <pre><span class="cm">// Normal orderBy — sort by a column</span>
+orderBy: { createdAt: <span class="str">'desc'</span> }
+<span class="cm">// → ORDER BY "createdAt" DESC</span>
+
+<span class="cm">// groupBy orderBy — sort by an aggregated value</span>
+orderBy: { _count: { id: <span class="str">'desc'</span> } }
+<span class="cm">// → ORDER BY COUNT("id") DESC</span>
+
+<span class="cm">// Other aggregation sorts</span>
+orderBy: { _sum: { age: <span class="str">'desc'</span> } }   <span class="cm">// ORDER BY SUM("age") DESC</span>
+orderBy: { _avg: { age: <span class="str">'asc'</span> } }   <span class="cm">// ORDER BY AVG("age") ASC</span></pre>
+    </div>
+
+    <div class="callout rule">
+      <div class="callout-label">Pattern to remember</div>
+      <p>Normal orderBy: <code>&#123; field: direction &#125;</code>. groupBy orderBy: <code>&#123; aggregation: &#123; field: direction &#125; &#125;</code> — one extra level because you're sorting by a computed value, not a raw column.</p>
+    </div>
+  </div>
+
+  <!-- ── PRISMA VS SQL ── -->
+  <div class="section">
+    <div class="section-label">09</div>
+    <h2>When to use $queryRaw instead</h2>
+
+    <p>For complex aggregations, raw SQL is often cleaner. This is a legitimate answer to "when would you NOT use Prisma?"</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label warn">Prisma groupBy — verbose</span></div>
+      <pre><span class="kw">await</span> prisma.post.<span class="fn">groupBy</span>({
+  by: [<span class="str">'userId'</span>],
+  _count: { id: <span class="kw">true</span> },
+  having: { id: { _count: { gte: <span class="num">2</span> } } },
+  orderBy: { _count: { id: <span class="str">'desc'</span> } }
+})</pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">$queryRaw — cleaner + typed</span></div>
+      <pre><span class="kw">const</span> result = <span class="kw">await</span> prisma.<span class="fn">$queryRaw</span>&lt;
+  { userId: <span class="type">string</span>; post_count: <span class="type">number</span> }[]
+&gt;<span class="str">`
+  SELECT "userId", COUNT("id")::int as post_count
+  FROM "Post"
+  GROUP BY "userId"
+  HAVING COUNT("id") >= 2
+  ORDER BY post_count DESC
+`</span>
+<span class="cm">// result[0].userId, result[0].post_count — fully typed</span></pre>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">Window functions</div>
+      <p>Prisma has no native support for window functions (<code>OVER PARTITION BY</code>). Always use <code>$queryRaw</code> for them. This is also a valid interview answer — "for window functions and complex reporting I drop to $queryRaw and write SQL directly."</p>
+    </div>
+  </div>
+
+  <!-- ── EXERCISE CORRECTIONS ── -->
+  <div class="section">
+    <div class="section-label">10</div>
+    <h2>Exercise — mistakes + corrections</h2>
+
+    <ul class="mistakes-list">
+      <li>
+        <div class="mistake-num">1</div>
+        <div class="mistake-body">
+          <h4><code>_count: { userId: true }</code> — wrong field</h4>
+          <p>Count by <code>id</code> not <code>userId</code>. You're counting records, not foreign keys. Use <code>_count: { id: true }</code>.</p>
+        </div>
+      </li>
+      <li>
+        <div class="mistake-num">2</div>
+        <div class="mistake-body">
+          <h4><code>orderBy: { _count: 'desc' }</code> — missing field</h4>
+          <p>groupBy orderBy needs the field name inside the aggregation: <code>orderBy: { _count: { id: 'desc' } }</code>.</p>
+        </div>
+      </li>
+      <li>
+        <div class="mistake-num">3</div>
+        <div class="mistake-body">
+          <h4>Used <code>aggregate</code> instead of <code>groupBy</code> for Q4</h4>
+          <p><code>aggregate</code> doesn't support <code>by</code> or <code>having</code> — those are <code>groupBy</code> options. Use <code>prisma.post.groupBy()</code> with <code>having</code> to filter groups.</p>
+        </div>
+      </li>
+    </ul>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">corrected exercise solutions</span></div>
+      <pre><span class="cm">// Q1 — counts</span>
+<span class="kw">const</span> totalPost = <span class="kw">await</span> prisma.post.<span class="fn">count</span>()
+<span class="kw">const</span> publishedPost = <span class="kw">await</span> prisma.post.<span class="fn">count</span>({ where: { published: <span class="kw">true</span> } })
+<span class="kw">const</span> notPublishedPost = <span class="kw">await</span> prisma.post.<span class="fn">count</span>({ where: { published: <span class="kw">false</span> } })
+
+<span class="cm">// Q2 — user stats</span>
+<span class="kw">const</span> userStats = <span class="kw">await</span> prisma.userBlog.<span class="fn">aggregate</span>({
+  _count: { id: <span class="kw">true</span> },
+  _min: { age: <span class="kw">true</span> },
+  _max: { age: <span class="kw">true</span> },
+  _avg: { age: <span class="kw">true</span> }
+})
+
+<span class="cm">// Q3 — posts per user, most first</span>
+<span class="kw">const</span> userGroupCount = <span class="kw">await</span> prisma.post.<span class="fn">groupBy</span>({
+  by: [<span class="str">'userId'</span>],
+  _count: { id: <span class="kw">true</span> },
+  orderBy: { _count: { id: <span class="str">'desc'</span> } }
+})
+
+<span class="cm">// Q4 — users with 2+ posts</span>
+<span class="kw">const</span> usersWithMorePosts = <span class="kw">await</span> prisma.post.<span class="fn">groupBy</span>({
+  by: [<span class="str">'userId'</span>],
+  _count: { id: <span class="kw">true</span> },
+  having: { id: { _count: { gte: <span class="num">2</span> } } }
+})
+
+<span class="cm">// Q5 — nested create</span>
+<span class="kw">await</span> prisma.userBlog.<span class="fn">create</span>({
+  data: {
+    email: <span class="str">'newuser@test.com'</span>,
+    name: <span class="str">'Anil'</span>, age: <span class="num">25</span>,
+    posts: { create: [{ title: <span class="str">'Post 1'</span> }, { title: <span class="str">'Post 2'</span> }] }
+  }
+})</pre>
+    </div>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">11</div>
+    <h2>Day 8 summary</h2>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h4>connect</h4>
+        <p>Link to existing record. Use raw FK directly when you have the id — simpler than nested syntax.</p>
+      </div>
+      <div class="summary-card">
+        <h4>nested create</h4>
+        <p>Parent + children in one call. Max 1 level deep in production. Use explicit steps beyond that.</p>
+      </div>
+      <div class="summary-card">
+        <h4>aggregate</h4>
+        <p>_count, _avg, _sum, _min, _max. Multiple stats in one query. Numeric fields only for math ops.</p>
+      </div>
+      <div class="summary-card">
+        <h4>groupBy</h4>
+        <p>Aggregate per group. by: ['field'] groups records. _count per group. orderBy the aggregation.</p>
+      </div>
+      <div class="summary-card">
+        <h4>where vs having</h4>
+        <p>where filters rows before grouping. having filters groups after aggregation.</p>
+      </div>
+      <div class="summary-card">
+        <h4>$queryRaw</h4>
+        <p>Complex aggregations and window functions. SQL is cleaner. Add TypeScript generic for type safety.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Prisma Study Plan · April 2025 · Anil</p>
+  <span class="next-day">Day 9 → Mock round 1 — querying cold</span>
+</footer>
+
+</body>
+</html>

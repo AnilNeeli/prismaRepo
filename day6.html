@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prisma Day 7 — Pagination + Sorting</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Fraunces:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: #2a2a2a;
+    --accent: #5DCAA5;
+    --accent2: #7F77DD;
+    --warn: #EF9F27;
+    --danger: #E24B4A;
+    --blue: #85B7EB;
+    --text: #e8e8e2;
+    --muted: #888880;
+    --faint: #444440;
+    --mono: 'JetBrains Mono', monospace;
+    --serif: 'Fraunces', serif;
+    --sans: 'DM Sans', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.7; }
+
+  header { border-bottom: 1px solid var(--border); padding: 48px 60px 40px; position: relative; overflow: hidden; }
+  header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 300px; height: 300px; background: radial-gradient(circle, rgba(133,183,235,0.07) 0%, transparent 70%); pointer-events: none; }
+  .header-tag { font-family: var(--mono); font-size: 11px; color: var(--blue); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  header h1 { font-family: var(--serif); font-size: 36px; font-weight: 600; color: #fff; line-height: 1.2; margin-bottom: 8px; }
+  header h1 em { font-style: italic; color: var(--blue); }
+  header p { font-size: 14px; color: var(--muted); max-width: 560px; }
+  .header-meta { display: flex; gap: 24px; margin-top: 24px; flex-wrap: wrap; }
+  .meta-chip { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); padding: 4px 12px; border-radius: 20px; }
+  .meta-chip span { color: var(--text); }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 48px 60px 80px; }
+
+  .section { margin-bottom: 52px; }
+  .section-label { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--blue); margin-bottom: 6px; }
+  .section h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
+  p { color: var(--text); margin-bottom: 12px; line-height: 1.75; }
+  p:last-child { margin-bottom: 0; }
+
+  .code-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 16px 0; overflow: hidden; }
+  .code-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .code-lang { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .code-label { font-family: var(--mono); font-size: 10px; color: var(--blue); }
+  .code-label.warn { color: var(--warn); }
+  .code-label.good { color: var(--accent); }
+  pre { padding: 20px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; color: var(--text); }
+  .kw { color: #7F77DD; }
+  .str { color: #5DCAA5; }
+  .cm { color: #555550; font-style: italic; }
+  .dec { color: #EF9F27; }
+  .type { color: #85B7EB; }
+  .num { color: #F0997B; }
+  .fn { color: #e8e8e2; }
+
+  code { font-family: var(--mono); font-size: 12px; background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--accent); }
+
+  .callout { border-left: 3px solid; border-radius: 0 6px 6px 0; padding: 14px 18px; margin: 16px 0; }
+  .callout-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+  .callout p { margin: 0; font-size: 13px; }
+  .callout.interview { border-color: var(--warn); background: rgba(239,159,39,0.06); }
+  .callout.interview .callout-label { color: var(--warn); }
+  .callout.gotcha { border-color: var(--danger); background: rgba(226,75,74,0.06); }
+  .callout.gotcha .callout-label { color: var(--danger); }
+  .callout.tip { border-color: var(--accent); background: rgba(93,202,165,0.06); }
+  .callout.tip .callout-label { color: var(--accent); }
+  .callout.rule { border-color: var(--accent2); background: rgba(127,119,221,0.06); }
+  .callout.rule .callout-label { color: var(--accent2); }
+
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); padding: 10px 14px; text-align: left; font-weight: 400; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--mono); font-size: 12px; color: var(--blue); }
+  td.desc { color: var(--muted); font-size: 13px; }
+  td.bad { color: var(--danger); font-size: 13px; }
+  td.good { color: var(--accent); font-size: 13px; }
+
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .compare-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .compare-card h4 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .compare-card.offset h4 { color: var(--warn); }
+  .compare-card.cursor h4 { color: var(--accent); }
+  .compare-card ul { list-style: none; padding: 0; }
+  .compare-card ul li { font-size: 12.5px; color: var(--muted); padding: 4px 0 4px 14px; position: relative; border-bottom: 1px solid var(--faint); }
+  .compare-card ul li:last-child { border-bottom: none; }
+  .compare-card ul li::before { content: '›'; position: absolute; left: 2px; }
+  .compare-card.offset ul li::before { color: var(--warn); }
+  .compare-card.cursor ul li::before { color: var(--accent); }
+
+  .cursor-flow { margin: 16px 0; }
+  .cursor-step { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; display: flex; gap: 14px; align-items: flex-start; }
+  .cursor-step-num { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--bg); background: var(--blue); width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .cursor-step-body h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+  .cursor-step-body p { font-size: 12px; color: var(--muted); margin: 0; font-family: var(--mono); }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; border-top: 2px solid var(--blue); }
+  .summary-card h4 { font-family: var(--mono); font-size: 11px; color: var(--blue); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .summary-card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  footer { border-top: 1px solid var(--border); padding: 24px 60px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  footer p { font-family: var(--mono); font-size: 11px; color: var(--faint); margin: 0; }
+  .next-day { font-family: var(--mono); font-size: 11px; color: var(--accent); background: rgba(93,202,165,0.08); border: 1px solid rgba(93,202,165,0.2); padding: 6px 14px; border-radius: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">Prisma Study Plan · April 2025</div>
+  <h1>Day 7 — <em>Pagination + Sorting</em></h1>
+  <p>skip/take · cursor-based · why cursor wins at scale · orderBy single + multi-field</p>
+  <div class="header-meta">
+    <div class="meta-chip">Phase <span>2 of 5</span></div>
+    <div class="meta-chip">Date <span>Wed Apr 9</span></div>
+    <div class="meta-chip">Stack <span>Prisma 5 · TS · Neon</span></div>
+    <div class="meta-chip">Status <span style="color:#5DCAA5">✓ Complete</span></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── OVERVIEW ── -->
+  <div class="section">
+    <div class="section-label">01</div>
+    <h2>Two pagination strategies</h2>
+
+    <div class="compare-grid">
+      <div class="compare-card offset">
+        <h4>Offset (skip/take)</h4>
+        <ul>
+          <li>Simple — page number × page size</li>
+          <li>Degrades at scale — scans discarded rows</li>
+          <li>Data shifting — records skip or duplicate</li>
+          <li>Good for small datasets, admin panels</li>
+        </ul>
+      </div>
+      <div class="compare-card cursor">
+        <h4>Cursor-based</h4>
+        <ul>
+          <li>Uses last record's id as bookmark</li>
+          <li>Constant speed — uses index, no scanning</li>
+          <li>Stable — inserts don't shift results</li>
+          <li>Best for feeds, infinite scroll, APIs</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout interview">
+      <div class="callout-label">Interview question — will come up</div>
+      <p>"Why is cursor pagination better at scale?" — Offset requires Postgres to scan and discard all prior rows. <code>OFFSET 10000</code> scans 10,000 rows to return 10. Cursor uses an index to jump directly to the right position — same speed on page 1 or page 10,000.</p>
+    </div>
+  </div>
+
+  <!-- ── OFFSET ── -->
+  <div class="section">
+    <div class="section-label">02</div>
+    <h2>Offset pagination — skip/take</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label warn">offset — simple but degrades</span></div>
+      <pre><span class="cm">// Page 1</span>
+<span class="kw">const</span> page1 = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+  take: <span class="num">10</span>,
+  skip: <span class="num">0</span>,
+  orderBy: { createdAt: <span class="str">'desc'</span> }
+})
+
+<span class="cm">// Page 2</span>
+<span class="kw">const</span> page2 = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+  take: <span class="num">10</span>,
+  skip: <span class="num">10</span>,
+  orderBy: { createdAt: <span class="str">'desc'</span> }
+})
+
+<span class="cm">// Dynamic page — formula: skip = (page - 1) * pageSize</span>
+<span class="kw">async function</span> <span class="fn">getPostsPage</span>(page: <span class="type">number</span>, pageSize: <span class="type">number</span>) {
+  <span class="kw">const</span> [posts, total] = <span class="kw">await</span> prisma.<span class="fn">$transaction</span>([
+    prisma.post.<span class="fn">findMany</span>({
+      take: pageSize,
+      skip: (page - <span class="num">1</span>) * pageSize,
+      orderBy: { createdAt: <span class="str">'desc'</span> }
+    }),
+    prisma.post.<span class="fn">count</span>()  <span class="cm">// total count for page numbers UI</span>
+  ])
+  <span class="kw">return</span> { posts, total, totalPages: <span class="type">Math</span>.<span class="fn">ceil</span>(total / pageSize) }
+}</pre>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">Why offset breaks at scale</div>
+      <p>SQL <code>OFFSET 10000 LIMIT 10</code> forces Postgres to scan and discard 10,000 rows to return 10. At page 1000 with 10 items per page — that's a 1000x waste. Also, if a new record is inserted between page loads, records at the boundary get skipped or duplicated.</p>
+    </div>
+  </div>
+
+  <!-- ── CURSOR ── -->
+  <div class="section">
+    <div class="section-label">03</div>
+    <h2>Cursor-based pagination</h2>
+
+    <p>Instead of "skip N rows", cursor says "give me records after this specific record." The cursor is the <code>id</code> of the last item on the current page.</p>
+
+    <div class="cursor-flow">
+      <div class="cursor-step">
+        <div class="cursor-step-num">1</div>
+        <div class="cursor-step-body">
+          <h4>First page — no cursor</h4>
+          <p>take: 10, no cursor → returns first 10 records</p>
+        </div>
+      </div>
+      <div class="cursor-step">
+        <div class="cursor-step-num">2</div>
+        <div class="cursor-step-body">
+          <h4>Extract cursor from last item</h4>
+          <p>cursor = posts[posts.length - 1].id</p>
+        </div>
+      </div>
+      <div class="cursor-step">
+        <div class="cursor-step-num">3</div>
+        <div class="cursor-step-body">
+          <h4>Next page — pass cursor + skip: 1</h4>
+          <p>cursor: &#123; id: cursor &#125;, skip: 1 (skips the cursor record itself)</p>
+        </div>
+      </div>
+      <div class="cursor-step">
+        <div class="cursor-step-num">4</div>
+        <div class="cursor-step-body">
+          <h4>Detect last page</h4>
+          <p>if posts.length &lt; take → no more pages, return nextCursor: null</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">cursor pagination — reusable function</span></div>
+      <pre><span class="kw">interface</span> <span class="type">PaginationArgs</span> {
+  take: <span class="type">number</span>
+  cursor?: <span class="type">string</span>  <span class="cm">// id of last item from previous page</span>
+}
+
+<span class="kw">async function</span> <span class="fn">getPostsCursor</span>({ take, cursor }: <span class="type">PaginationArgs</span>) {
+  <span class="kw">const</span> posts = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+    take,
+    skip: cursor ? <span class="num">1</span> : <span class="num">0</span>,            <span class="cm">// skip cursor itself if provided</span>
+    cursor: cursor ? { id: cursor } : <span class="kw">undefined</span>,
+    orderBy: { createdAt: <span class="str">'desc'</span> },
+    select: {
+      id: <span class="kw">true</span>,
+      title: <span class="kw">true</span>,
+      createdAt: <span class="kw">true</span>,
+      user: { select: { name: <span class="kw">true</span> } }
+    }
+  })
+
+  <span class="kw">return</span> {
+    posts,
+    nextCursor: posts.length === take
+      ? posts[posts.length - <span class="num">1</span>].id  <span class="cm">// more pages exist</span>
+      : <span class="kw">null</span>                           <span class="cm">// last page</span>
+  }
+}
+
+<span class="cm">// Usage</span>
+<span class="kw">const</span> page1 = <span class="kw">await</span> <span class="fn">getPostsCursor</span>({ take: <span class="num">10</span> })
+<span class="kw">const</span> page2 = <span class="kw">await</span> <span class="fn">getPostsCursor</span>({ take: <span class="num">10</span>, cursor: page1.nextCursor! })</pre>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">Why skip: 1</div>
+      <p>The cursor points to the last record you already saw. Without <code>skip: 1</code>, Prisma would include that record again at the top of the next page — duplicating it. <code>skip: 1</code> tells Prisma to start after the cursor, not at it.</p>
+    </div>
+  </div>
+
+  <!-- ── SQL COMPARISON ── -->
+  <div class="section">
+    <div class="section-label">04</div>
+    <h2>What Postgres actually runs</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">sql</span><span class="code-label warn">offset — scans and discards</span></div>
+      <pre><span class="cm">-- Postgres must scan 10,000 rows to return 10</span>
+SELECT * FROM "Post"
+ORDER BY "createdAt" DESC
+LIMIT <span class="num">10</span> OFFSET <span class="num">10000</span></pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">sql</span><span class="code-label good">cursor — index jump, no scanning</span></div>
+      <pre><span class="cm">-- Postgres uses index to jump directly to position</span>
+SELECT * FROM "Post"
+WHERE "id" > <span class="str">'uuid-last-seen'</span>
+ORDER BY "createdAt" DESC
+LIMIT <span class="num">10</span></pre>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Approach</th><th>Page 1 speed</th><th>Page 1000 speed</th><th>Data stability</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Offset</td>
+            <td class="good">Fast</td>
+            <td class="bad">Slow — scans 10k rows</td>
+            <td class="bad">Records shift on insert</td>
+          </tr>
+          <tr>
+            <td>Cursor</td>
+            <td class="good">Fast</td>
+            <td class="good">Same speed</td>
+            <td class="good">Stable — index based</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── SORTING ── -->
+  <div class="section">
+    <div class="section-label">05</div>
+    <h2>Sorting — orderBy</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">single · multi · relation · aggregation</span></div>
+      <pre><span class="cm">// Single field</span>
+prisma.post.<span class="fn">findMany</span>({
+  orderBy: { createdAt: <span class="str">'desc'</span> }
+})
+
+<span class="cm">// Multiple fields — primary sort first, tiebreaker second</span>
+prisma.post.<span class="fn">findMany</span>({
+  orderBy: [
+    { published: <span class="str">'desc'</span> },   <span class="cm">// published posts first</span>
+    { createdAt: <span class="str">'desc'</span> }    <span class="cm">// then by newest within each group</span>
+  ]
+})
+
+<span class="cm">// Sort by relation field — posts ordered by author name</span>
+prisma.post.<span class="fn">findMany</span>({
+  orderBy: {
+    user: { name: <span class="str">'asc'</span> }
+  }
+})
+
+<span class="cm">// Sort by aggregation — users with most posts first</span>
+prisma.userBlog.<span class="fn">findMany</span>({
+  orderBy: {
+    posts: { _count: <span class="str">'desc'</span> }
+  }
+})</pre>
+    </div>
+  </div>
+
+  <!-- ── COMBINED ── -->
+  <div class="section">
+    <div class="section-label">06</div>
+    <h2>Real world — pagination + filtering + sorting</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">production feed function</span></div>
+      <pre><span class="kw">async function</span> <span class="fn">getPostsFeed</span>(options: {
+  take: <span class="type">number</span>
+  cursor?: <span class="type">string</span>
+  published?: <span class="type">boolean</span>
+  userId?: <span class="type">string</span>
+}) {
+  <span class="kw">const</span> { take, cursor, published, userId } = options
+
+  <span class="kw">const</span> posts = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({
+    take,
+    skip: cursor ? <span class="num">1</span> : <span class="num">0</span>,
+    cursor: cursor ? { id: cursor } : <span class="kw">undefined</span>,
+    where: {
+      ...(published !== <span class="kw">undefined</span> && { published }),  <span class="cm">// optional filter</span>
+      ...(userId && { userId })                          <span class="cm">// optional filter</span>
+    },
+    orderBy: { createdAt: <span class="str">'desc'</span> },
+    include: {
+      user: { select: { name: <span class="kw">true</span> } }
+    }
+  })
+
+  <span class="kw">return</span> {
+    posts,
+    nextCursor: posts.length === take
+      ? posts[posts.length - <span class="num">1</span>].id
+      : <span class="kw">null</span>
+  }
+}</pre>
+    </div>
+
+    <div class="callout rule">
+      <div class="callout-label">Spread operator for optional filters</div>
+      <p><code>...(published !== undefined && &#123; published &#125;)</code> — this pattern conditionally adds a field to the where clause. If <code>published</code> is undefined, nothing is added. If it has a value, <code>&#123; published: true/false &#125;</code> is spread in. Cleaner than writing if/else for every filter.</p>
+    </div>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">07</div>
+    <h2>Day 7 summary</h2>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h4>skip/take</h4>
+        <p>Simple offset pagination. Degrades at scale. Good for admin panels and small datasets.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Cursor</h4>
+        <p>id of last record as bookmark. Always same speed. Stable under inserts. Use for feeds and APIs.</p>
+      </div>
+      <div class="summary-card">
+        <h4>skip: 1</h4>
+        <p>Always skip the cursor record itself — otherwise it appears at top of next page as a duplicate.</p>
+      </div>
+      <div class="summary-card">
+        <h4>nextCursor</h4>
+        <p>posts.length === take → more pages exist. posts.length &lt; take → last page, return null.</p>
+      </div>
+      <div class="summary-card">
+        <h4>orderBy array</h4>
+        <p>Multiple sort fields — first field is primary sort, rest are tiebreakers in order.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Sort by count</h4>
+        <p>posts: &#123; _count: 'desc' &#125; — sort parent by number of children. No raw SQL needed.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Prisma Study Plan · April 2025 · Anil</p>
+  <span class="next-day">Day 8 → Nested writes + aggregations</span>
+</footer>
+
+</body>
+</html>

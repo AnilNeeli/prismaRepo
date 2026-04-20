@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prisma Day 2 — Relations</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Fraunces:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: #2a2a2a;
+    --accent: #5DCAA5;
+    --accent2: #7F77DD;
+    --warn: #EF9F27;
+    --danger: #E24B4A;
+    --text: #e8e8e2;
+    --muted: #888880;
+    --faint: #444440;
+    --mono: 'JetBrains Mono', monospace;
+    --serif: 'Fraunces', serif;
+    --sans: 'DM Sans', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.7; }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 48px 60px 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  header::before {
+    content: '';
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(127,119,221,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .header-tag { font-family: var(--mono); font-size: 11px; color: var(--accent2); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  header h1 { font-family: var(--serif); font-size: 36px; font-weight: 600; color: #fff; line-height: 1.2; margin-bottom: 8px; }
+  header h1 em { font-style: italic; color: var(--accent2); }
+  header p { font-size: 14px; color: var(--muted); max-width: 500px; }
+  .header-meta { display: flex; gap: 24px; margin-top: 24px; flex-wrap: wrap; }
+  .meta-chip { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); padding: 4px 12px; border-radius: 20px; }
+  .meta-chip span { color: var(--text); }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 48px 60px 80px; }
+
+  .section { margin-bottom: 52px; }
+  .section-label { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent2); margin-bottom: 6px; }
+  .section h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
+  p { color: var(--text); margin-bottom: 12px; line-height: 1.75; }
+  p:last-child { margin-bottom: 0; }
+
+  .code-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 16px 0; overflow: hidden; }
+  .code-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .code-lang { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .code-label { font-family: var(--mono); font-size: 10px; color: var(--accent2); }
+  pre { padding: 20px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; color: var(--text); }
+  .kw { color: #7F77DD; }
+  .str { color: #5DCAA5; }
+  .cm { color: #555550; font-style: italic; }
+  .dec { color: #EF9F27; }
+  .type { color: #85B7EB; }
+  .num { color: #F0997B; }
+  .fn { color: #e8e8e2; }
+  .prop { color: #D4537E; }
+  .hl { background: rgba(93,202,165,0.1); border-radius: 2px; padding: 0 2px; }
+
+  code { font-family: var(--mono); font-size: 12px; background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--accent); }
+
+  .callout { border-left: 3px solid; border-radius: 0 6px 6px 0; padding: 14px 18px; margin: 16px 0; }
+  .callout-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+  .callout p { margin: 0; font-size: 13px; }
+  .callout.interview { border-color: var(--warn); background: rgba(239,159,39,0.06); }
+  .callout.interview .callout-label { color: var(--warn); }
+  .callout.gotcha { border-color: var(--danger); background: rgba(226,75,74,0.06); }
+  .callout.gotcha .callout-label { color: var(--danger); }
+  .callout.tip { border-color: var(--accent); background: rgba(93,202,165,0.06); }
+  .callout.tip .callout-label { color: var(--accent); }
+  .callout.rule { border-color: var(--accent2); background: rgba(127,119,221,0.06); }
+  .callout.rule .callout-label { color: var(--accent2); }
+
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); padding: 10px 14px; text-align: left; font-weight: 400; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--mono); font-size: 12px; color: var(--accent2); }
+  td.desc { color: var(--muted); font-size: 13px; }
+  td.good { color: #5DCAA5; font-size: 13px; }
+  td.bad { color: #E24B4A; font-size: 13px; }
+
+  .relation-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin: 12px 0;
+    border-top: 3px solid;
+  }
+  .relation-card.one-one { border-top-color: #5DCAA5; }
+  .relation-card.one-many { border-top-color: #7F77DD; }
+  .relation-card.many-many-implicit { border-top-color: #EF9F27; }
+  .relation-card.many-many-explicit { border-top-color: #E24B4A; }
+  .relation-card h3 { font-family: var(--mono); font-size: 12px; font-weight: 600; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
+  .relation-card.one-one h3 { color: #5DCAA5; }
+  .relation-card.one-many h3 { color: #7F77DD; }
+  .relation-card.many-many-implicit h3 { color: #EF9F27; }
+  .relation-card.many-many-explicit h3 { color: #E24B4A; }
+  .relation-card p { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  .relation-card .rule-text { font-size: 12.5px; color: var(--text); }
+
+  .mistakes-list { list-style: none; padding: 0; }
+  .mistakes-list li { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); align-items: flex-start; }
+  .mistakes-list li:last-child { border-bottom: none; }
+  .mistake-num { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--danger); background: rgba(226,75,74,0.1); width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .mistake-body h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .mistake-body p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; border-top: 2px solid var(--accent2); }
+  .summary-card h4 { font-family: var(--mono); font-size: 11px; color: var(--accent2); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .summary-card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .compare-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .compare-card h4 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+  .compare-card.implicit h4 { color: var(--warn); }
+  .compare-card.explicit h4 { color: var(--danger); }
+  .compare-card ul { list-style: none; padding: 0; }
+  .compare-card ul li { font-size: 12.5px; color: var(--muted); padding: 4px 0 4px 14px; position: relative; border-bottom: 1px solid var(--faint); }
+  .compare-card ul li:last-child { border-bottom: none; }
+  .compare-card ul li::before { content: '›'; position: absolute; left: 2px; color: var(--muted); }
+
+  footer { border-top: 1px solid var(--border); padding: 24px 60px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  footer p { font-family: var(--mono); font-size: 11px; color: var(--faint); margin: 0; }
+  .next-day { font-family: var(--mono); font-size: 11px; color: var(--accent); background: rgba(93,202,165,0.08); border: 1px solid rgba(93,202,165,0.2); padding: 6px 14px; border-radius: 20px; }
+
+  @media print {
+    body { background: #fff; color: #000; }
+    header { background: #f5f5f5; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">Prisma Study Plan · April 2025</div>
+  <h1>Day 2 — <em>Relations</em></h1>
+  <p>1:1 · 1:N · M:N (implicit + explicit) · Referential actions · FK placement rule</p>
+  <div class="header-meta">
+    <div class="meta-chip">Phase <span>1 of 5</span></div>
+    <div class="meta-chip">Date <span>Wed Apr 2</span></div>
+    <div class="meta-chip">Stack <span>Prisma 5 · TS · Neon</span></div>
+    <div class="meta-chip">Status <span style="color:#5DCAA5">✓ Complete</span></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── THE GOLDEN RULE ── -->
+  <div class="section">
+    <div class="section-label">01</div>
+    <h2>The golden rule — FK placement</h2>
+
+    <p>Before anything else, internalize this: the foreign key always lives on the <strong>child side</strong> — the "many" side, or the "belongs to" side. You will need this instinct for every schema you design.</p>
+
+    <div class="callout rule">
+      <div class="callout-label">Rule</div>
+      <p>Post belongs to User → <code>userId</code> lives on <strong>Post</strong>, not User. Comment belongs to Post → <code>postId</code> lives on <strong>Comment</strong>. The parent never holds the child's ID.</p>
+    </div>
+
+    <div class="callout interview">
+      <div class="callout-label">Interview question</div>
+      <p>"Where does the foreign key live in a 1:N relation?" — Always on the child (many) side. The parent holds an array reference in Prisma, but that's virtual — no column in the DB.</p>
+    </div>
+  </div>
+
+  <!-- ── RELATION TYPES OVERVIEW ── -->
+  <div class="section">
+    <div class="section-label">02</div>
+    <h2>The three relation types</h2>
+
+    <div class="relation-card one-one">
+      <h3>1:1 — One to One</h3>
+      <p>User has one Profile. Profile belongs to one User.</p>
+      <p class="rule-text">Key: FK on child side + <code>@unique</code> on the FK field. The <code>@unique</code> is what makes it 1:1 instead of 1:N.</p>
+    </div>
+
+    <div class="relation-card one-many">
+      <h3>1:N — One to Many</h3>
+      <p>User has many Posts. Post belongs to one User.</p>
+      <p class="rule-text">Key: FK on child side (Post). Parent (User) has a virtual array <code>posts Post[]</code> — no column in DB.</p>
+    </div>
+
+    <div class="relation-card many-many-implicit">
+      <h3>M:N — Implicit</h3>
+      <p>Post has many Tags. Tag has many Posts. No extra data on the relation.</p>
+      <p class="rule-text">Key: Prisma auto-creates a hidden join table. You use <code>connect</code> / <code>disconnect</code>. Cannot store extra columns.</p>
+    </div>
+
+    <div class="relation-card many-many-explicit">
+      <h3>M:N — Explicit</h3>
+      <p>Post has many Tags via PostTag. PostTag stores who tagged it and when.</p>
+      <p class="rule-text">Key: You own the join table as a full model. Use when you need extra data on the relation (assignedAt, role, order, etc.).</p>
+    </div>
+  </div>
+
+  <!-- ── 1:N ── -->
+  <div class="section">
+    <div class="section-label">03</div>
+    <h2>1:N — One to Many</h2>
+
+    <p>The most common relation in any schema. A User has many Posts.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">prisma</span><span class="code-label">1:N example</span></div>
+      <pre><span class="kw">model</span> <span class="type">User</span> {
+  id    <span class="type">String</span> <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  email <span class="type">String</span> <span class="dec">@unique</span>
+  posts <span class="type">Post</span>[]   <span class="cm">// virtual — no column in DB. just navigation.</span>
+}
+
+<span class="kw">model</span> <span class="type">Post</span> {
+  id     <span class="type">String</span> <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  title  <span class="type">String</span>
+  userId <span class="type">String</span>           <span class="cm">// actual FK column in DB</span>
+  user   <span class="type">User</span>   <span class="dec">@relation</span>(fields: [userId], references: [id])
+}</pre>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">What @relation does</div>
+      <p><code>fields: [userId]</code> — the FK on THIS model. <code>references: [id]</code> — the PK on the OTHER model. Always read it as: "my <code>userId</code> field references the <code>id</code> field on User."</p>
+    </div>
+  </div>
+
+  <!-- ── 1:1 ── -->
+  <div class="section">
+    <div class="section-label">04</div>
+    <h2>1:1 — One to One</h2>
+
+    <p>A User has one Profile. The only difference from 1:N is <code>@unique</code> on the FK field.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">prisma</span><span class="code-label">1:1 example</span></div>
+      <pre><span class="kw">model</span> <span class="type">User</span> {
+  id      <span class="type">String</span>   <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  email   <span class="type">String</span>   <span class="dec">@unique</span>
+  profile <span class="type">Profile</span><span class="kw">?</span>  <span class="cm">// optional — user may not have a profile yet</span>
+}
+
+<span class="kw">model</span> <span class="type">Profile</span> {
+  id     <span class="type">String</span> <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  bio    <span class="type">String</span><span class="kw">?</span>
+  userId <span class="type">String</span> <span class="dec">@unique</span>      <span class="cm">// @unique = what makes this 1:1 not 1:N</span>
+  user   <span class="type">User</span>   <span class="dec">@relation</span>(fields: [userId], references: [id])
+}</pre>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">Common mistake</div>
+      <p>Forgetting <code>@unique</code> on the FK in a 1:1 relation. Without it, Prisma creates a 1:N — multiple profiles per user become possible. The DB won't complain, but your data integrity breaks.</p>
+    </div>
+  </div>
+
+  <!-- ── M:N IMPLICIT ── -->
+  <div class="section">
+    <div class="section-label">05</div>
+    <h2>M:N — Implicit (Prisma manages the join table)</h2>
+
+    <p>Use when the relation itself carries no data — just a pure connection between two models.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">prisma</span><span class="code-label">implicit M:N</span></div>
+      <pre><span class="kw">model</span> <span class="type">Post</span> {
+  id   <span class="type">String</span> <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  tags <span class="type">Tag</span>[]   <span class="cm">// just list the other model</span>
+}
+
+<span class="kw">model</span> <span class="type">Tag</span> {
+  id    <span class="type">String</span> <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  name  <span class="type">String</span> <span class="dec">@unique</span>
+  posts <span class="type">Post</span>[]  <span class="cm">// just list the other model</span>
+}</pre>
+    </div>
+
+    <p>Prisma auto-creates a hidden <code>_PostToTag</code> table with columns <code>A</code> (postId) and <code>B</code> (tagId). You write to it via <code>connect</code> and <code>disconnect</code>:</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">connecting + disconnecting</span></div>
+      <pre><span class="cm">// Add a tag to a post</span>
+<span class="kw">await</span> prisma.post.<span class="fn">update</span>({
+  where: { id: postId },
+  data: { tags: { connect: { id: tagId } } }
+})
+
+<span class="cm">// Remove a tag from a post</span>
+<span class="kw">await</span> prisma.post.<span class="fn">update</span>({
+  where: { id: postId },
+  data: { tags: { disconnect: { id: tagId } } }
+})</pre>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">Limitation</div>
+      <p>The hidden join table only has two columns — the two FKs. You cannot add <code>assignedAt</code>, <code>role</code>, or any extra data. The moment you need metadata on the relation, switch to explicit M:N.</p>
+    </div>
+  </div>
+
+  <!-- ── M:N EXPLICIT ── -->
+  <div class="section">
+    <div class="section-label">06</div>
+    <h2>M:N — Explicit (you own the join table)</h2>
+
+    <p>Use when you need extra data on the relation. You create the join table as a full Prisma model.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">prisma</span><span class="code-label">explicit M:N — fintech example</span></div>
+      <pre><span class="kw">model</span> <span class="type">Post</span> {
+  id   <span class="type">String</span>    <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  tags <span class="type">PostTag</span>[]  <span class="cm">// points to join table, not Tag directly</span>
+}
+
+<span class="kw">model</span> <span class="type">Tag</span> {
+  id    <span class="type">String</span>    <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  name  <span class="type">String</span>    <span class="dec">@unique</span>
+  posts <span class="type">PostTag</span>[]  <span class="cm">// points to join table, not Post directly</span>
+}
+
+<span class="kw">model</span> <span class="type">PostTag</span> {               <span class="cm">// this IS the join table</span>
+  postId     <span class="type">String</span>
+  tagId      <span class="type">String</span>
+  taggedBy   <span class="type">String</span>           <span class="cm">// extra data — who tagged it</span>
+  assignedAt <span class="type">DateTime</span> <span class="dec">@default</span>(<span class="fn">now</span>())
+
+  post <span class="type">Post</span> <span class="dec">@relation</span>(fields: [postId], references: [id], onDelete: <span class="fn">Cascade</span>)
+  tag  <span class="type">Tag</span>  <span class="dec">@relation</span>(fields: [tagId], references: [id], onDelete: <span class="fn">Cascade</span>)
+
+  <span class="dec">@@id</span>([postId, tagId])   <span class="cm">// compound PK — one row per post+tag combo</span>
+}</pre>
+    </div>
+
+    <p>With explicit M:N you write directly to the join table:</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">writing to the join table</span></div>
+      <pre><span class="cm">// Create the relation with extra data</span>
+<span class="kw">await</span> prisma.postTag.<span class="fn">create</span>({
+  data: {
+    postId: <span class="str">'post-123'</span>,
+    tagId: <span class="str">'tag-456'</span>,
+    taggedBy: <span class="str">'anil@test.com'</span>,
+  }
+})
+
+<span class="cm">// Query posts with their tags + who tagged them</span>
+<span class="kw">const</span> post = <span class="kw">await</span> prisma.post.<span class="fn">findUnique</span>({
+  where: { id: <span class="str">'post-123'</span> },
+  include: {
+    tags: {
+      include: { tag: <span class="kw">true</span> }  <span class="cm">// nested include to get Tag details</span>
+    }
+  }
+})</pre>
+    </div>
+
+    <div class="compare-grid">
+      <div class="compare-card implicit">
+        <h4>Implicit M:N — use when</h4>
+        <ul>
+          <li>Pure connection, no metadata</li>
+          <li>Simple tags, categories, groups</li>
+          <li>You use connect / disconnect</li>
+          <li>Prisma manages the join table</li>
+        </ul>
+      </div>
+      <div class="compare-card explicit">
+        <h4>Explicit M:N — use when</h4>
+        <ul>
+          <li>Need data on the relation</li>
+          <li>assignedAt, role, order, grade</li>
+          <li>You write to join table directly</li>
+          <li>You need @@id on join table</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout interview">
+      <div class="callout-label">Interview question — will come up</div>
+      <p>"When would you use explicit M:N over implicit?" — Explicit when the relation itself carries data. Example: a student enrollment needs a grade and enrolled date — implicit can't store that. A simple post-tag with no metadata → implicit is fine.</p>
+    </div>
+  </div>
+
+  <!-- ── REFERENTIAL ACTIONS ── -->
+  <div class="section">
+    <div class="section-label">07</div>
+    <h2>Referential actions — critical for fintech</h2>
+
+    <p>What happens to child records when the parent is deleted? Prisma defaults to <code>Restrict</code> — which means deleting a User who has Posts will throw an error. Always be explicit.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">prisma</span><span class="code-label">onDelete on the relation</span></div>
+      <pre><span class="kw">model</span> <span class="type">Post</span> {
+  userId <span class="type">String</span>
+  user   <span class="type">User</span> <span class="dec">@relation</span>(fields: [userId], references: [id], <span class="hl">onDelete: Cascade</span>)
+  <span class="cm">// deleting User deletes all their Posts</span>
+}</pre>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Action</th><th>What happens</th><th>Use when</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Cascade</td>
+            <td class="desc">Delete children when parent deleted</td>
+            <td class="desc">Posts when User deleted, Comments when Post deleted</td>
+          </tr>
+          <tr>
+            <td>Restrict</td>
+            <td class="desc">Block parent delete if children exist (default)</td>
+            <td class="desc">Financial records — never delete a User who has transactions</td>
+          </tr>
+          <tr>
+            <td>SetNull</td>
+            <td class="desc">Set FK to null when parent deleted</td>
+            <td class="desc">Optional relations — post's author deleted, post survives with null author</td>
+          </tr>
+          <tr>
+            <td>NoAction</td>
+            <td class="desc">Like Restrict but checked at end of transaction</td>
+            <td class="desc">Complex transactions where order matters</td>
+          </tr>
+          <tr>
+            <td>SetDefault</td>
+            <td class="desc">Set FK to field's default value</td>
+            <td class="desc">Rare — assign to a default "deleted user" record</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout interview">
+      <div class="callout-label">Fintech interview angle</div>
+      <p>"Why would you use Restrict on financial records?" — A User with Transactions should never be hard-deleted. Restrict forces you to handle deletion intentionally — soft-delete the user instead. Cascade would silently destroy transaction history.</p>
+    </div>
+  </div>
+
+  <!-- ── SELF-REFERENTIAL ── -->
+  <div class="section">
+    <div class="section-label">08</div>
+    <h2>Self-referential relations</h2>
+
+    <p>A model that relates to itself. Common pattern: Employee → Manager (who is also an Employee).</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">prisma</span><span class="code-label">self-referential</span></div>
+      <pre><span class="kw">model</span> <span class="type">Employee</span> {
+  id         <span class="type">String</span>     <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  name       <span class="type">String</span>
+  managerId  <span class="type">String</span><span class="kw">?</span>             <span class="cm">// nullable — CEO has no manager</span>
+  manager    <span class="type">Employee</span><span class="kw">?</span>  <span class="dec">@relation</span>(<span class="str">"Reports"</span>, fields: [managerId], references: [id])
+  reports    <span class="type">Employee</span>[] <span class="dec">@relation</span>(<span class="str">"Reports"</span>)
+}</pre>
+    </div>
+
+    <p>The named relation <code>"Reports"</code> is required when a model relates to itself — Prisma needs it to distinguish the two sides.</p>
+  </div>
+
+  <!-- ── PRACTICE EXERCISE ── -->
+  <div class="section">
+    <div class="section-label">09</div>
+    <h2>Practice exercise — mistakes + corrections</h2>
+
+    <p>Built a blogging platform schema. Three mistakes caught:</p>
+
+    <ul class="mistakes-list">
+      <li>
+        <div class="mistake-num">1</div>
+        <div class="mistake-body">
+          <h4>Duplicate <code>postId</code> field in Comment</h4>
+          <p>Two <code>postId String</code> declarations in the same model. Prisma throws a validation error. Always check for duplicate field names.</p>
+        </div>
+      </li>
+      <li>
+        <div class="mistake-num">2</div>
+        <div class="mistake-body">
+          <h4>Wrong <code>references</code> on Comment → Post</h4>
+          <p>Had <code>@relation(fields: [postId], references: [userId])</code> — referencing <code>userId</code> on Post which doesn't exist. Should be <code>references: [id]</code>. Always reference the PK of the other model.</p>
+        </div>
+      </li>
+      <li>
+        <div class="mistake-num">3</div>
+        <div class="mistake-body">
+          <h4>Missing <code>onDelete: Cascade</code></h4>
+          <p>Spec required cascades — Post deleted when User deleted, Comment deleted when Post deleted. Without it Prisma defaults to Restrict, causing runtime errors on delete operations.</p>
+        </div>
+      </li>
+    </ul>
+
+    <p style="margin-top:16px">Corrected final schema:</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">prisma</span><span class="code-label">corrected blogging schema</span></div>
+      <pre><span class="kw">model</span> <span class="type">User</span> {
+  id        <span class="type">String</span>    <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  email     <span class="type">String</span>    <span class="dec">@unique</span>
+  name      <span class="type">String</span><span class="kw">?</span>
+  posts     <span class="type">Post</span>[]
+  comments  <span class="type">Comment</span>[]
+  createdAt <span class="type">DateTime</span>  <span class="dec">@default</span>(<span class="fn">now</span>())
+  updatedAt <span class="type">DateTime</span>  <span class="dec">@updatedAt</span>
+}
+
+<span class="kw">model</span> <span class="type">Post</span> {
+  id        <span class="type">String</span>    <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  title     <span class="type">String</span>
+  content   <span class="type">String</span><span class="kw">?</span>
+  published <span class="type">Boolean</span>   <span class="dec">@default</span>(<span class="kw">false</span>)
+  userId    <span class="type">String</span>
+  createdAt <span class="type">DateTime</span>  <span class="dec">@default</span>(<span class="fn">now</span>())
+  updatedAt <span class="type">DateTime</span>  <span class="dec">@updatedAt</span>
+  user      <span class="type">User</span>      <span class="dec">@relation</span>(fields: [userId], references: [id], onDelete: <span class="fn">Cascade</span>)
+  comments  <span class="type">Comment</span>[]
+  tags      <span class="type">PostTag</span>[]
+}
+
+<span class="kw">model</span> <span class="type">Comment</span> {
+  id        <span class="type">String</span>   <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  body      <span class="type">String</span>
+  postId    <span class="type">String</span>
+  userId    <span class="type">String</span>
+  createdAt <span class="type">DateTime</span> <span class="dec">@default</span>(<span class="fn">now</span>())
+  updatedAt <span class="type">DateTime</span> <span class="dec">@updatedAt</span>
+  user      <span class="type">User</span>     <span class="dec">@relation</span>(fields: [userId], references: [id])
+  post      <span class="type">Post</span>     <span class="dec">@relation</span>(fields: [postId], references: [id], onDelete: <span class="fn">Cascade</span>)
+}
+
+<span class="kw">model</span> <span class="type">Tag</span> {
+  id    <span class="type">String</span>    <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  name  <span class="type">String</span>    <span class="dec">@unique</span>
+  posts <span class="type">PostTag</span>[]
+}
+
+<span class="kw">model</span> <span class="type">PostTag</span> {
+  postId     <span class="type">String</span>
+  tagId      <span class="type">String</span>
+  taggedBy   <span class="type">String</span>
+  assignedAt <span class="type">DateTime</span> <span class="dec">@default</span>(<span class="fn">now</span>())
+
+  post <span class="type">Post</span> <span class="dec">@relation</span>(fields: [postId], references: [id], onDelete: <span class="fn">Cascade</span>)
+  tag  <span class="type">Tag</span>  <span class="dec">@relation</span>(fields: [tagId], references: [id], onDelete: <span class="fn">Cascade</span>)
+
+  <span class="dec">@@id</span>([postId, tagId])
+}</pre>
+    </div>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">10</div>
+    <h2>Day 2 summary</h2>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h4>FK rule</h4>
+        <p>Always on the child (many) side. Parent holds a virtual array — no DB column.</p>
+      </div>
+      <div class="summary-card">
+        <h4>1:1 vs 1:N</h4>
+        <p>Only difference: <code>@unique</code> on the FK. Without it you get 1:N.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Implicit M:N</h4>
+        <p>Prisma manages join table. Use <code>connect</code> / <code>disconnect</code>. No extra columns possible.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Explicit M:N</h4>
+        <p>Own the join table. Write directly to it. Use <code>@@id([a, b])</code> as compound PK.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Referential actions</h4>
+        <p>Default is Restrict. Use Cascade for posts/comments. Use Restrict for financial records.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Self-referential</h4>
+        <p>Model relates to itself. Requires named relation string to disambiguate both sides.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Prisma Study Plan · April 2025 · Anil</p>
+  <span class="next-day">Day 3 → CRUD + typed client</span>
+</footer>
+
+</body>
+</html>
