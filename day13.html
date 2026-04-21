@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prisma Day 14 — Consolidation: Repo Layer</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Fraunces:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: #2a2a2a;
+    --accent: #5DCAA5;
+    --accent2: #7F77DD;
+    --warn: #EF9F27;
+    --danger: #E24B4A;
+    --blue: #85B7EB;
+    --text: #e8e8e2;
+    --muted: #888880;
+    --faint: #444440;
+    --mono: 'JetBrains Mono', monospace;
+    --serif: 'Fraunces', serif;
+    --sans: 'DM Sans', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.7; }
+
+  header { border-bottom: 1px solid var(--border); padding: 48px 60px 40px; position: relative; overflow: hidden; }
+  header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 300px; height: 300px; background: radial-gradient(circle, rgba(93,202,165,0.07) 0%, transparent 70%); pointer-events: none; }
+  .header-tag { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  header h1 { font-family: var(--serif); font-size: 36px; font-weight: 600; color: #fff; line-height: 1.2; margin-bottom: 8px; }
+  header h1 em { font-style: italic; color: var(--accent); }
+  header p { font-size: 14px; color: var(--muted); max-width: 560px; }
+  .header-meta { display: flex; gap: 24px; margin-top: 24px; flex-wrap: wrap; }
+  .meta-chip { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); padding: 4px 12px; border-radius: 20px; }
+  .meta-chip span { color: var(--text); }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 48px 60px 80px; }
+
+  .section { margin-bottom: 52px; }
+  .section-label { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+  .section h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
+  p { color: var(--text); margin-bottom: 12px; line-height: 1.75; }
+  p:last-child { margin-bottom: 0; }
+
+  .code-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 16px 0; overflow: hidden; }
+  .code-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .code-lang { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .code-label { font-family: var(--mono); font-size: 10px; color: var(--accent); }
+  .code-label.warn { color: var(--warn); }
+  .code-label.danger { color: var(--danger); }
+  pre { padding: 20px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; color: var(--text); }
+  .kw { color: #7F77DD; }
+  .str { color: #5DCAA5; }
+  .cm { color: #555550; font-style: italic; }
+  .dec { color: #EF9F27; }
+  .type { color: #85B7EB; }
+  .num { color: #F0997B; }
+  .fn { color: #e8e8e2; }
+  .good { color: #5DCAA5; }
+  .bad { color: #E24B4A; }
+
+  code { font-family: var(--mono); font-size: 12px; background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--accent); }
+
+  .callout { border-left: 3px solid; border-radius: 0 6px 6px 0; padding: 14px 18px; margin: 16px 0; }
+  .callout-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+  .callout p { margin: 0; font-size: 13px; }
+  .callout.interview { border-color: var(--warn); background: rgba(239,159,39,0.06); }
+  .callout.interview .callout-label { color: var(--warn); }
+  .callout.gotcha { border-color: var(--danger); background: rgba(226,75,74,0.06); }
+  .callout.gotcha .callout-label { color: var(--danger); }
+  .callout.tip { border-color: var(--accent); background: rgba(93,202,165,0.06); }
+  .callout.tip .callout-label { color: var(--accent); }
+  .callout.rule { border-color: var(--accent2); background: rgba(127,119,221,0.06); }
+  .callout.rule .callout-label { color: var(--accent2); }
+
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); padding: 10px 14px; text-align: left; font-weight: 400; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  td.desc { color: var(--muted); font-size: 13px; }
+  td.good { color: var(--accent); font-size: 13px; }
+  td.bad { color: var(--danger); font-size: 13px; }
+
+  .retry-flow { margin: 16px 0; }
+  .retry-step { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 16px; margin-bottom: 6px; display: flex; gap: 12px; align-items: flex-start; }
+  .retry-badge { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
+  .retry-badge.attempt { background: rgba(133,183,235,0.15); color: var(--blue); }
+  .retry-badge.fail { background: rgba(226,75,74,0.15); color: var(--danger); }
+  .retry-badge.wait { background: rgba(239,159,39,0.15); color: var(--warn); }
+  .retry-badge.success { background: rgba(93,202,165,0.15); color: var(--accent); }
+  .retry-text { font-size: 12.5px; color: var(--muted); }
+  .retry-text span { color: var(--text); font-family: var(--mono); font-size: 12px; }
+
+  .error-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0; }
+  .error-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .error-card h4 { font-family: var(--mono); font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .error-card:nth-child(1) h4 { color: var(--danger); }
+  .error-card:nth-child(2) h4 { color: var(--danger); }
+  .error-card:nth-child(3) h4 { color: var(--warn); }
+  .error-card p { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .error-card .retry { font-family: var(--mono); font-size: 10px; padding: 2px 8px; border-radius: 10px; }
+  .error-card:nth-child(1) .retry { background: rgba(226,75,74,0.15); color: var(--danger); }
+  .error-card:nth-child(2) .retry { background: rgba(226,75,74,0.15); color: var(--danger); }
+  .error-card:nth-child(3) .retry { background: rgba(93,202,165,0.15); color: var(--accent); }
+
+  .transfer-flow { margin: 16px 0; }
+  .transfer-step { display: flex; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--faint); align-items: flex-start; }
+  .transfer-step:last-child { border-bottom: none; }
+  .transfer-num { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--bg); background: var(--accent); width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .transfer-body h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+  .transfer-body p { font-size: 12px; color: var(--muted); margin: 0; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; border-top: 2px solid var(--accent); }
+  .summary-card h4 { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .summary-card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  footer { border-top: 1px solid var(--border); padding: 24px 60px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  footer p { font-family: var(--mono); font-size: 11px; color: var(--faint); margin: 0; }
+  .next-day { font-family: var(--mono); font-size: 11px; color: var(--accent); background: rgba(93,202,165,0.08); border: 1px solid rgba(93,202,165,0.2); padding: 6px 14px; border-radius: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">Prisma Study Plan · April 2025</div>
+  <h1>Day 14 — <em>Consolidation: Repo Layer</em></h1>
+  <p>UserRepo · AccountRepo · TransactionRepo · transferFunds · withRetry · P2034</p>
+  <div class="header-meta">
+    <div class="meta-chip">Phase <span>3 of 5</span></div>
+    <div class="meta-chip">Date <span>Mon Apr 21</span></div>
+    <div class="meta-chip">Stack <span>Prisma 5 · TS · Neon</span></div>
+    <div class="meta-chip">Status <span style="color:#5DCAA5">✓ Complete</span></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── SCHEMA ── -->
+  <div class="section">
+    <div class="section-label">01</div>
+    <h2>Fintech schema</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">prisma</span><span class="code-label">schema additions</span></div>
+      <pre><span class="kw">model</span> <span class="type">Account</span> {
+  id           <span class="type">String</span>        <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  userId       <span class="type">String</span>
+  type         <span class="type">AccountType</span>
+  balance      <span class="type">Float</span>         <span class="dec">@default</span>(<span class="num">0</span>)
+  deletedAt    <span class="type">DateTime</span><span class="kw">?</span>
+  createdAt    <span class="type">DateTime</span>      <span class="dec">@default</span>(<span class="fn">now</span>())
+  updatedAt    <span class="type">DateTime</span>      <span class="dec">@updatedAt</span>
+  user         <span class="type">UserBlog</span>      <span class="dec">@relation</span>(fields: [userId], references: [id])
+  transactions <span class="type">Transaction</span>[]
+}
+
+<span class="kw">model</span> <span class="type">Transaction</span> {
+  id             <span class="type">String</span>            <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  accountId      <span class="type">String</span>
+  amount         <span class="type">Float</span>
+  type           <span class="type">TransactionType</span>
+  status         <span class="type">TransactionStatus</span> <span class="dec">@default</span>(<span class="type">PENDING</span>)
+  idempotencyKey <span class="type">String</span>            <span class="dec">@unique</span>
+  createdAt      <span class="type">DateTime</span>          <span class="dec">@default</span>(<span class="fn">now</span>())
+  account        <span class="type">Account</span>           <span class="dec">@relation</span>(fields: [accountId], references: [id])
+}
+
+<span class="kw">enum</span> <span class="type">AccountType</span> { SAVINGS · CURRENT }
+<span class="kw">enum</span> <span class="type">TransactionType</span> { DEBIT · CREDIT }
+<span class="kw">enum</span> <span class="type">TransactionStatus</span> { PENDING · COMPLETED · FAILED }</pre>
+    </div>
+  </div>
+
+  <!-- ── USER REPO ── -->
+  <div class="section">
+    <div class="section-label">02</div>
+    <h2>UserRepository</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">all 5 methods</span></div>
+      <pre><span class="kw">class</span> <span class="type">UserRepository</span> {
+
+  <span class="kw">async</span> <span class="fn">findById</span>(id: <span class="type">string</span>) {
+    <span class="kw">return</span> prisma.userBlog.<span class="fn">findUnique</span>({ where: { id } })
+  }
+
+  <span class="kw">async</span> <span class="fn">findByEmail</span>(email: <span class="type">string</span>) {
+    <span class="kw">return</span> prisma.userBlog.<span class="fn">findUnique</span>({ where: { email } })
+  }
+
+  <span class="kw">async</span> <span class="fn">create</span>(data: <span class="type">Prisma</span>.<span class="type">UserBlogCreateInput</span>) {
+    <span class="kw">return</span> prisma.userBlog.<span class="fn">create</span>({ data })
+  }
+
+  <span class="kw">async</span> <span class="fn">softDelete</span>(id: <span class="type">string</span>) {
+    <span class="kw">try</span> {
+      <span class="kw">return await</span> prisma.userBlog.<span class="fn">update</span>({
+        where: { id },
+        data: { deletedAt: <span class="kw">new</span> <span class="type">Date</span>() }
+      })
+    } <span class="kw">catch</span> (error) {
+      <span class="kw">if</span> (error <span class="kw">instanceof</span> <span class="type">Prisma</span>.<span class="type">PrismaClientKnownRequestError</span>) {
+        <span class="kw">if</span> (error.code === <span class="str">'P2025'</span>) <span class="kw">throw new</span> <span class="type">Error</span>(<span class="str">'User not found'</span>)
+      }
+      <span class="kw">throw</span> error
+    }
+  }
+
+  <span class="kw">async</span> <span class="fn">restore</span>(id: <span class="type">string</span>) {
+    <span class="cm">// Must find deleted record first — middleware filters deletedAt: null</span>
+    <span class="kw">const</span> deleted = <span class="kw">await</span> prisma.userBlog.<span class="fn">findFirst</span>({
+      where: { id, deletedAt: { not: <span class="kw">null</span> } }
+    })
+    <span class="kw">if</span> (!deleted) <span class="kw">throw new</span> <span class="type">Error</span>(<span class="str">'User not found or not deleted'</span>)
+
+    <span class="kw">return</span> prisma.userBlog.<span class="fn">update</span>({
+      where: { id },
+      data: { deletedAt: <span class="kw">null</span> }
+    })
+  }
+}</pre>
+    </div>
+  </div>
+
+  <!-- ── ACCOUNT REPO ── -->
+  <div class="section">
+    <div class="section-label">03</div>
+    <h2>AccountRepository</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">all 5 methods</span></div>
+      <pre><span class="kw">class</span> <span class="type">AccountRepository</span> {
+
+  <span class="kw">async</span> <span class="fn">findById</span>(id: <span class="type">string</span>) {
+    <span class="kw">return</span> prisma.account.<span class="fn">findUnique</span>({ where: { id } })
+  }
+
+  <span class="kw">async</span> <span class="fn">findByUserId</span>(userId: <span class="type">string</span>) {
+    <span class="kw">return</span> prisma.account.<span class="fn">findMany</span>({ where: { userId } })
+  }
+
+  <span class="kw">async</span> <span class="fn">create</span>(userId: <span class="type">string</span>, type: <span class="type">AccountType</span>) {
+    <span class="kw">return</span> prisma.account.<span class="fn">create</span>({ data: { userId, type } })
+  }
+
+  <span class="kw">async</span> <span class="fn">updateBalance</span>(id: <span class="type">string</span>, amount: <span class="type">number</span>, type: <span class="str">'increment'</span> | <span class="str">'decrement'</span>) {
+    <span class="kw">return</span> prisma.account.<span class="fn">update</span>({
+      where: { id },
+      data: {
+        balance: type === <span class="str">'increment'</span>
+          ? { increment: amount }
+          : { decrement: amount }
+      }
+    })
+  }
+
+  <span class="kw">async</span> <span class="fn">softDelete</span>(id: <span class="type">string</span>) {
+    <span class="kw">try</span> {
+      <span class="kw">return await</span> prisma.account.<span class="fn">update</span>({
+        where: { id },
+        data: { deletedAt: <span class="kw">new</span> <span class="type">Date</span>() }
+      })
+    } <span class="kw">catch</span> (error) {
+      <span class="kw">if</span> (error <span class="kw">instanceof</span> <span class="type">Prisma</span>.<span class="type">PrismaClientKnownRequestError</span>) {
+        <span class="kw">if</span> (error.code === <span class="str">'P2025'</span>) <span class="kw">throw new</span> <span class="type">Error</span>(<span class="str">'Account not found'</span>)
+      }
+      <span class="kw">throw</span> error
+    }
+  }
+}</pre>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">updateBalance — why increment/decrement is safe</div>
+      <p>Prisma's <code>increment</code> and <code>decrement</code> are atomic — Postgres handles the math as <code>balance = balance - 1000</code>. No read-then-write needed. No race condition at the application level.</p>
+    </div>
+  </div>
+
+  <!-- ── TRANSACTION REPO ── -->
+  <div class="section">
+    <div class="section-label">04</div>
+    <h2>TransactionRepository</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">all 5 methods</span></div>
+      <pre><span class="kw">class</span> <span class="type">TransactionRepository</span> {
+
+  <span class="kw">async</span> <span class="fn">create</span>(data: <span class="type">Prisma</span>.<span class="type">TransactionUncheckedCreateInput</span>) {
+    <span class="kw">return</span> prisma.transaction.<span class="fn">create</span>({ data })
+  }
+
+  <span class="kw">async</span> <span class="fn">findById</span>(id: <span class="type">string</span>) {
+    <span class="kw">return</span> prisma.transaction.<span class="fn">findUnique</span>({ where: { id } })
+  }
+
+  <span class="kw">async</span> <span class="fn">findByAccountId</span>(accountId: <span class="type">string</span>, cursor?: <span class="type">string</span>, take = <span class="num">10</span>) {
+    <span class="kw">return</span> prisma.transaction.<span class="fn">findMany</span>({
+      where: { accountId },
+      take,
+      skip: cursor ? <span class="num">1</span> : <span class="num">0</span>,       <span class="cm">// skip: 1 skips cursor itself</span>
+      cursor: cursor ? { id: cursor } : <span class="kw">undefined</span>,
+      orderBy: { createdAt: <span class="str">'desc'</span> }
+    })
+  }
+
+  <span class="kw">async</span> <span class="fn">sumByAccountId</span>(accountId: <span class="type">string</span>) {
+    <span class="cm">// aggregate not groupBy — single account, single total</span>
+    <span class="kw">const</span> result = <span class="kw">await</span> prisma.transaction.<span class="fn">aggregate</span>({
+      where: { accountId },
+      _sum: { amount: <span class="kw">true</span> }
+    })
+    <span class="kw">return</span> result._sum.amount ?? <span class="num">0</span>  <span class="cm">// return 0 if no transactions</span>
+  }
+
+  <span class="kw">async</span> <span class="fn">findByIdempotencyKey</span>(key: <span class="type">string</span>) {
+    <span class="kw">return</span> prisma.transaction.<span class="fn">findUnique</span>({
+      where: { idempotencyKey: key }
+    })
+  }
+}</pre>
+    </div>
+
+    <div class="callout rule">
+      <div class="callout-label">aggregate vs groupBy</div>
+      <p><code>aggregate</code> — one account, one total. Returns a single number. <code>groupBy</code> — multiple accounts, total per group. Returns an array. For <code>sumByAccountId</code> always use <code>aggregate</code>.</p>
+    </div>
+  </div>
+
+  <!-- ── WITH RETRY ── -->
+  <div class="section">
+    <div class="section-label">05</div>
+    <h2>withRetry — the callback wrapper</h2>
+
+    <p><code>withRetry</code> takes any async function as a callback and runs it up to 3 times if it fails with P2034. It's a generic shell — works for any async operation.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">withRetry — generic retry shell</span></div>
+      <pre><span class="kw">async function</span> <span class="fn">withRetry</span>&lt;<span class="type">T</span>&gt;(
+  fn: () => <span class="type">Promise</span>&lt;<span class="type">T</span>&gt;,  <span class="cm">// function that takes no args, returns Promise</span>
+  retries = <span class="num">3</span>
+): <span class="type">Promise</span>&lt;<span class="type">T</span>&gt; {
+  <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i < retries; i++) {
+    <span class="kw">try</span> {
+      <span class="kw">return await</span> <span class="fn">fn</span>()              <span class="cm">// execute the function</span>
+    } <span class="kw">catch</span> (error: <span class="kw">any</span>) {
+      <span class="kw">if</span> (error.code === <span class="str">'P2034'</span> && i < retries - <span class="num">1</span>) {
+        <span class="kw">await new</span> <span class="type">Promise</span>(resolve =>
+          <span class="fn">setTimeout</span>(resolve, <span class="num">50</span> * (i + <span class="num">1</span>))  <span class="cm">// 50ms, 100ms, 150ms</span>
+        )
+        <span class="kw">continue</span>  <span class="cm">// retry</span>
+      }
+      <span class="kw">throw</span> error  <span class="cm">// P2002, P2025 — don't retry, bubble up</span>
+    }
+  }
+  <span class="kw">throw new</span> <span class="type">Error</span>(<span class="str">'Max retries exceeded'</span>)
+}</pre>
+    </div>
+
+    <div class="callout rule">
+      <div class="callout-label">Why arrow function wrapping matters</div>
+      <p><code>withRetry(prisma.$transaction(...))</code> — executes immediately, can't retry. <code>withRetry(() => prisma.$transaction(...))</code> — passes a function reference, withRetry controls when it runs. The <code>() =&gt;</code> delays execution — that's what makes retrying possible.</p>
+    </div>
+
+    <div class="retry-flow">
+      <div class="retry-step">
+        <span class="retry-badge attempt">i = 0</span>
+        <span class="retry-text">fn() → $transaction runs → <span>P2034 thrown</span> → rollback</span>
+      </div>
+      <div class="retry-step">
+        <span class="retry-badge wait">wait</span>
+        <span class="retry-text">catch P2034 → <span>wait 50ms</span> → continue</span>
+      </div>
+      <div class="retry-step">
+        <span class="retry-badge attempt">i = 1</span>
+        <span class="retry-text">fn() → $transaction runs again from scratch → <span>fresh read</span> → sees updated balance</span>
+      </div>
+      <div class="retry-step">
+        <span class="retry-badge success">success</span>
+        <span class="retry-text"><span>return result</span> → caller gets typed Transaction</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TRANSFER FUNDS ── -->
+  <div class="section">
+    <div class="section-label">06</div>
+    <h2>transferFunds — full implementation</h2>
+
+    <div class="transfer-flow">
+      <div class="transfer-step">
+        <div class="transfer-num">1</div>
+        <div class="transfer-body">
+          <h4>Check idempotency key</h4>
+          <p>findUnique by idempotencyKey — if found return existing, don't charge again</p>
+        </div>
+      </div>
+      <div class="transfer-step">
+        <div class="transfer-num">2</div>
+        <div class="transfer-body">
+          <h4>Validate sender balance</h4>
+          <p>findUnique fromAccount — if not found throw. If balance &lt; amount throw 'Insufficient funds'</p>
+        </div>
+      </div>
+      <div class="transfer-step">
+        <div class="transfer-num">3</div>
+        <div class="transfer-body">
+          <h4>Debit sender</h4>
+          <p>update fromAccount balance with decrement — atomic, no race condition</p>
+        </div>
+      </div>
+      <div class="transfer-step">
+        <div class="transfer-num">4</div>
+        <div class="transfer-body">
+          <h4>Credit receiver</h4>
+          <p>update toAccount balance with increment</p>
+        </div>
+      </div>
+      <div class="transfer-step">
+        <div class="transfer-num">5</div>
+        <div class="transfer-body">
+          <h4>Record DEBIT transaction</h4>
+          <p>create Transaction with type DEBIT, status COMPLETED, idempotencyKey</p>
+        </div>
+      </div>
+      <div class="transfer-step">
+        <div class="transfer-num">6</div>
+        <div class="transfer-body">
+          <h4>Record CREDIT transaction</h4>
+          <p>create Transaction with type CREDIT, idempotencyKey + '_credit' suffix</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">transferFunds — complete</span></div>
+      <pre><span class="kw">async function</span> <span class="fn">transferFunds</span>(params: {
+  fromAccountId: <span class="type">string</span>
+  toAccountId: <span class="type">string</span>
+  amount: <span class="type">number</span>
+  idempotencyKey: <span class="type">string</span>
+}) {
+  <span class="kw">return</span> <span class="fn">withRetry</span>(() =>
+    prisma.<span class="fn">$transaction</span>(<span class="kw">async</span> (tx) => {
+
+      <span class="cm">// Step 1 — idempotency check (inside tx — must be atomic)</span>
+      <span class="kw">const</span> existing = <span class="kw">await</span> tx.transaction.<span class="fn">findUnique</span>({
+        where: { idempotencyKey: params.idempotencyKey }
+      })
+      <span class="kw">if</span> (existing) <span class="kw">return</span> existing
+
+      <span class="cm">// Step 2 — validate sender balance</span>
+      <span class="kw">const</span> fromAccount = <span class="kw">await</span> tx.account.<span class="fn">findUnique</span>({
+        where: { id: params.fromAccountId }
+      })
+      <span class="kw">if</span> (!fromAccount) <span class="kw">throw new</span> <span class="type">Error</span>(<span class="str">'Source account not found'</span>)
+      <span class="kw">if</span> (fromAccount.balance < params.amount) {
+        <span class="kw">throw new</span> <span class="type">Error</span>(<span class="str">'Insufficient funds'</span>)
+      }
+
+      <span class="cm">// Step 3 — debit sender</span>
+      <span class="kw">await</span> tx.account.<span class="fn">update</span>({
+        where: { id: params.fromAccountId },
+        data: { balance: { decrement: params.amount } }
+      })
+
+      <span class="cm">// Step 4 — credit receiver</span>
+      <span class="kw">await</span> tx.account.<span class="fn">update</span>({
+        where: { id: params.toAccountId },
+        data: { balance: { increment: params.amount } }
+      })
+
+      <span class="cm">// Step 5 — record debit</span>
+      <span class="kw">await</span> tx.transaction.<span class="fn">create</span>({
+        data: {
+          accountId: params.fromAccountId,
+          amount: params.amount,
+          type: <span class="str">'DEBIT'</span>,
+          status: <span class="str">'COMPLETED'</span>,
+          idempotencyKey: params.idempotencyKey
+        }
+      })
+
+      <span class="cm">// Step 6 — record credit</span>
+      <span class="kw">return</span> tx.transaction.<span class="fn">create</span>({
+        data: {
+          accountId: params.toAccountId,
+          amount: params.amount,
+          type: <span class="str">'CREDIT'</span>,
+          status: <span class="str">'COMPLETED'</span>,
+          idempotencyKey: <span class="str">`<span class="kw">${params.idempotencyKey}</span>_credit`</span>
+        }
+      })
+
+    }, {
+      isolationLevel: <span class="type">Prisma</span>.<span class="type">TransactionIsolationLevel</span>.Serializable,
+      maxWait: <span class="num">5000</span>,
+      timeout: <span class="num">10000</span>
+    })
+  )
+}</pre>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">Idempotency key for credit side</div>
+      <p>The credit transaction needs a different idempotency key — <code>idempotencyKey + '_credit'</code>. If you used the same key for both, the second <code>create</code> would throw P2002 (unique constraint). Same base key, different suffix per leg of the transfer is the standard pattern.</p>
+    </div>
+
+    <div class="callout interview">
+      <div class="callout-label">Why idempotency check is inside the transaction</div>
+      <p>If the check is outside the transaction, two concurrent requests could both pass the check before either commits — both proceed to charge. Inside the transaction at Serializable isolation, Postgres detects the conflict and aborts one.</p>
+    </div>
+  </div>
+
+  <!-- ── P2034 ── -->
+  <div class="section">
+    <div class="section-label">07</div>
+    <h2>P2034 — and why retry gets fresh balance</h2>
+
+    <p>P2034 is thrown when two concurrent Serializable transactions conflict. It's the only Prisma error that's safe to retry automatically.</p>
+
+    <div class="error-grid">
+      <div class="error-card">
+        <h4>P2002</h4>
+        <p>Unique constraint violation — duplicate email, duplicate idempotency key</p>
+        <span class="retry">don't retry</span>
+      </div>
+      <div class="error-card">
+        <h4>P2025</h4>
+        <p>Record not found — update/delete on missing record</p>
+        <span class="retry">don't retry</span>
+      </div>
+      <div class="error-card">
+        <h4>P2034</h4>
+        <p>Transaction serialization conflict — timing based, next attempt may succeed</p>
+        <span class="retry">safe to retry</span>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">Why retry gets updated balance</div>
+      <p>P2034 means the transaction was rolled back — nothing changed in the DB. The retry runs the entire function from scratch including the balance read. It sees the committed state from the other transaction — the real current balance. This is why retrying from scratch (not resuming) is critical. Fresh read → correct decision.</p>
+    </div>
+  </div>
+
+  <!-- ── SYNTAX NOTES ── -->
+  <div class="section">
+    <div class="section-label">08</div>
+    <h2>Syntax gaps to drill</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Pattern</th><th>Correct syntax</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Cursor skip</td>
+            <td class="desc"><code>skip: cursor ? 1 : 0</code> — skip 1 only when cursor exists</td>
+          </tr>
+          <tr>
+            <td>Single total</td>
+            <td class="desc"><code>aggregate({ _sum: { amount: true } })</code> not groupBy</td>
+          </tr>
+          <tr>
+            <td>Isolation level</td>
+            <td class="desc"><code>Prisma.TransactionIsolationLevel.Serializable</code></td>
+          </tr>
+          <tr>
+            <td>Atomic balance</td>
+            <td class="desc"><code>balance: { increment: amount }</code> or <code>{ decrement: amount }</code></td>
+          </tr>
+          <tr>
+            <td>Retry callback</td>
+            <td class="desc"><code>withRetry(() => prisma.$transaction(...))</code> — arrow fn delays execution</td>
+          </tr>
+          <tr>
+            <td>Error check</td>
+            <td class="desc"><code>error instanceof Prisma.PrismaClientKnownRequestError</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">09</div>
+    <h2>Day 14 summary</h2>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h4>UserRepository</h4>
+        <p>findById, findByEmail, create, softDelete with P2025, restore with middleware bypass.</p>
+      </div>
+      <div class="summary-card">
+        <h4>AccountRepository</h4>
+        <p>findById, findByUserId, create, updateBalance with conditional increment/decrement, softDelete.</p>
+      </div>
+      <div class="summary-card">
+        <h4>TransactionRepository</h4>
+        <p>create, findById, findByAccountId (cursor), sumByAccountId (aggregate), findByIdempotencyKey.</p>
+      </div>
+      <div class="summary-card">
+        <h4>withRetry</h4>
+        <p>Takes fn: () => Promise&lt;T&gt;. Catches P2034, waits with backoff, retries from scratch.</p>
+      </div>
+      <div class="summary-card">
+        <h4>transferFunds</h4>
+        <p>6 steps: idempotency → validate → debit → credit → record DEBIT → record CREDIT.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Fresh read on retry</h4>
+        <p>Retry runs entire function from scratch. Re-reads balance → sees real committed state → correct decision.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Prisma Study Plan · April 2025 · Anil</p>
+  <span class="next-day">Day 15 → Indexes + query plans</span>
+</footer>
+
+</body>
+</html>
