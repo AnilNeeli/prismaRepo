@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prisma Day 15 — Indexes + Query Plans</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Fraunces:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: #2a2a2a;
+    --accent: #5DCAA5;
+    --accent2: #7F77DD;
+    --warn: #EF9F27;
+    --danger: #E24B4A;
+    --blue: #85B7EB;
+    --text: #e8e8e2;
+    --muted: #888880;
+    --faint: #444440;
+    --mono: 'JetBrains Mono', monospace;
+    --serif: 'Fraunces', serif;
+    --sans: 'DM Sans', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.7; }
+
+  header { border-bottom: 1px solid var(--border); padding: 48px 60px 40px; position: relative; overflow: hidden; }
+  header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 300px; height: 300px; background: radial-gradient(circle, rgba(239,159,39,0.07) 0%, transparent 70%); pointer-events: none; }
+  .header-tag { font-family: var(--mono); font-size: 11px; color: var(--warn); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  header h1 { font-family: var(--serif); font-size: 36px; font-weight: 600; color: #fff; line-height: 1.2; margin-bottom: 8px; }
+  header h1 em { font-style: italic; color: var(--warn); }
+  header p { font-size: 14px; color: var(--muted); max-width: 560px; }
+  .header-meta { display: flex; gap: 24px; margin-top: 24px; flex-wrap: wrap; }
+  .meta-chip { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); padding: 4px 12px; border-radius: 20px; }
+  .meta-chip span { color: var(--text); }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 48px 60px 80px; }
+
+  .section { margin-bottom: 52px; }
+  .section-label { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--warn); margin-bottom: 6px; }
+  .section h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
+  p { color: var(--text); margin-bottom: 12px; line-height: 1.75; }
+  p:last-child { margin-bottom: 0; }
+
+  .code-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 16px 0; overflow: hidden; }
+  .code-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .code-lang { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .code-label { font-family: var(--mono); font-size: 10px; color: var(--warn); }
+  .code-label.good { color: var(--accent); }
+  .code-label.danger { color: var(--danger); }
+  pre { padding: 20px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; color: var(--text); }
+  .kw { color: #7F77DD; }
+  .str { color: #5DCAA5; }
+  .cm { color: #555550; font-style: italic; }
+  .dec { color: #EF9F27; }
+  .type { color: #85B7EB; }
+  .num { color: #F0997B; }
+  .fn { color: #e8e8e2; }
+  .good { color: #5DCAA5; }
+  .bad { color: #E24B4A; }
+
+  code { font-family: var(--mono); font-size: 12px; background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--accent); }
+
+  .callout { border-left: 3px solid; border-radius: 0 6px 6px 0; padding: 14px 18px; margin: 16px 0; }
+  .callout-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+  .callout p { margin: 0; font-size: 13px; }
+  .callout.interview { border-color: var(--warn); background: rgba(239,159,39,0.06); }
+  .callout.interview .callout-label { color: var(--warn); }
+  .callout.gotcha { border-color: var(--danger); background: rgba(226,75,74,0.06); }
+  .callout.gotcha .callout-label { color: var(--danger); }
+  .callout.tip { border-color: var(--accent); background: rgba(93,202,165,0.06); }
+  .callout.tip .callout-label { color: var(--accent); }
+  .callout.rule { border-color: var(--accent2); background: rgba(127,119,221,0.06); }
+  .callout.rule .callout-label { color: var(--accent2); }
+
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); padding: 10px 14px; text-align: left; font-weight: 400; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--mono); font-size: 12px; color: var(--warn); }
+  td.desc { color: var(--muted); font-size: 13px; }
+  td.good { color: var(--accent); font-size: 13px; }
+  td.bad { color: var(--danger); font-size: 13px; }
+  td.ok { color: var(--warn); font-size: 13px; }
+
+  .scan-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0; }
+  .scan-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; border-top: 3px solid; }
+  .scan-card.bad { border-top-color: var(--danger); }
+  .scan-card.ok { border-top-color: var(--warn); }
+  .scan-card.good { border-top-color: var(--accent); }
+  .scan-card h4 { font-family: var(--mono); font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+  .scan-card.bad h4 { color: var(--danger); }
+  .scan-card.ok h4 { color: var(--warn); }
+  .scan-card.good h4 { color: var(--accent); }
+  .scan-card p { font-size: 12px; color: var(--muted); margin: 0; }
+
+  .composite-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 16px 0; }
+  .composite-row { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; display: flex; gap: 12px; align-items: center; }
+  .composite-icon { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; white-space: nowrap; flex-shrink: 0; }
+  .composite-icon.yes { background: rgba(93,202,165,0.15); color: var(--accent); }
+  .composite-icon.no { background: rgba(226,75,74,0.15); color: var(--danger); }
+  .composite-text { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .composite-text span { color: var(--text); }
+
+  .slow-pattern { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin: 10px 0; }
+  .slow-pattern-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .slow-badge { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: rgba(226,75,74,0.15); color: var(--danger); }
+  .slow-pattern h4 { font-size: 13px; font-weight: 600; color: var(--text); }
+  .slow-pattern p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; border-top: 2px solid var(--warn); }
+  .summary-card h4 { font-family: var(--mono); font-size: 11px; color: var(--warn); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .summary-card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  footer { border-top: 1px solid var(--border); padding: 24px 60px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  footer p { font-family: var(--mono); font-size: 11px; color: var(--faint); margin: 0; }
+  .next-day { font-family: var(--mono); font-size: 11px; color: var(--accent); background: rgba(93,202,165,0.08); border: 1px solid rgba(93,202,165,0.2); padding: 6px 14px; border-radius: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">Prisma Study Plan · April 2025</div>
+  <h1>Day 15 — <em>Indexes + Query Plans</em></h1>
+  <p>@@index · composite indexes · EXPLAIN ANALYZE · Seq Scan vs Index Scan · partial indexes · slow patterns</p>
+  <div class="header-meta">
+    <div class="meta-chip">Phase <span>4 of 5</span></div>
+    <div class="meta-chip">Date <span>Tue Apr 22</span></div>
+    <div class="meta-chip">Stack <span>Prisma 5 · TS · Neon</span></div>
+    <div class="meta-chip">Status <span style="color:#5DCAA5">✓ Complete</span></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── WHAT IS AN INDEX ── -->
+  <div class="section">
+    <div class="section-label">01</div>
+    <h2>What is an index?</h2>
+
+    <p>A separate data structure (B-tree by default) that keeps a sorted copy of one or more columns. Like the index at the back of a book — instead of reading every page, you jump directly to the right page.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">sql</span><span class="code-label danger">without index — full table scan</span></div>
+      <pre><span class="cm">-- Postgres reads EVERY row, checks userId on each one</span>
+<span class="cm">-- 1 million rows = 1 million comparisons</span>
+SELECT * FROM "Post" WHERE "userId" = <span class="str">'uuid-123'</span>
+<span class="cm">-- Called: Sequential Scan (Seq Scan)</span></pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">sql</span><span class="code-label good">with index — direct jump</span></div>
+      <pre><span class="cm">-- With @@index([userId]) on Post</span>
+<span class="cm">-- Postgres uses B-tree to jump directly to matching rows</span>
+<span class="cm">-- 1 million rows = ~20 comparisons (log2 of 1M)</span>
+SELECT * FROM "Post" WHERE "userId" = <span class="str">'uuid-123'</span>
+<span class="cm">-- Called: Index Scan</span></pre>
+    </div>
+  </div>
+
+  <!-- ── ADDING INDEXES ── -->
+  <div class="section">
+    <div class="section-label">02</div>
+    <h2>Adding indexes in Prisma</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">prisma</span><span class="code-label">@@index syntax</span></div>
+      <pre><span class="kw">model</span> <span class="type">Post</span> {
+  id        <span class="type">String</span>   <span class="dec">@id</span> <span class="dec">@default</span>(<span class="fn">uuid</span>())
+  userId    <span class="type">String</span>
+  published <span class="type">Boolean</span>  <span class="dec">@default</span>(<span class="kw">false</span>)
+  createdAt <span class="type">DateTime</span> <span class="dec">@default</span>(<span class="fn">now</span>())
+
+  <span class="dec">@@index</span>([userId])              <span class="cm">// single field index</span>
+  <span class="dec">@@index</span>([userId, createdAt])   <span class="cm">// composite index — order matters</span>
+}
+
+<span class="cm">// Prisma generates:</span>
+<span class="cm">// CREATE INDEX "Post_userId_idx" ON "Post"("userId");</span>
+<span class="cm">// CREATE INDEX "Post_userId_createdAt_idx" ON "Post"("userId", "createdAt");</span>
+
+<span class="cm">// @unique and @@unique also create indexes automatically</span></pre>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">Indexes that exist automatically</div>
+      <p><code>@id</code> → always indexed (primary key). <code>@unique</code> → creates a unique index. <code>@@unique([a, b])</code> → creates a compound unique index. You only need <code>@@index</code> for non-unique fields you query frequently.</p>
+    </div>
+  </div>
+
+  <!-- ── COMPOSITE INDEX ── -->
+  <div class="section">
+    <div class="section-label">03</div>
+    <h2>Composite index — column order matters</h2>
+
+    <p>An index can only be used if the query includes the <strong>leftmost column(s)</strong>. Like a phone book sorted by last name then first name — you can find "Smith, John" but can't efficiently find "everyone named John."</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">prisma</span><span class="code-label">@@index([userId, createdAt])</span></div>
+      <pre><span class="cm">// This composite index helps:</span>
+<span class="good">✓ filter by userId only              — leading column present</span>
+<span class="good">✓ filter by userId + createdAt       — both columns</span>
+<span class="good">✓ filter by userId + order createdAt — leading column present</span>
+
+<span class="cm">// This composite index does NOT help:</span>
+<span class="bad">✗ filter by createdAt only           — leading column missing</span></pre>
+    </div>
+
+    <div class="composite-grid">
+      <div class="composite-row">
+        <span class="composite-icon yes">uses index</span>
+        <span class="composite-text"><span>where: &#123; userId: 'x' &#125;</span> — leading column present</span>
+      </div>
+      <div class="composite-row">
+        <span class="composite-icon yes">uses index</span>
+        <span class="composite-text"><span>where: &#123; userId: 'x', createdAt: &#123; gte: date &#125; &#125;</span> — both columns</span>
+      </div>
+      <div class="composite-row">
+        <span class="composite-icon no">no index</span>
+        <span class="composite-text"><span>where: &#123; createdAt: &#123; gte: date &#125; &#125;</span> — leading column missing → Seq Scan</span>
+      </div>
+    </div>
+
+    <div class="callout interview">
+      <div class="callout-label">Interview question</div>
+      <p>"Why does <code>@@index([userId, createdAt])</code> NOT help a query that only filters by createdAt?" — The B-tree is sorted by userId first. Without specifying a userId, Postgres can't use the sorted structure to find records by createdAt alone — it would need to scan all userId groups. A separate <code>@@index([createdAt])</code> is needed.</p>
+    </div>
+  </div>
+
+  <!-- ── EXPLAIN ANALYZE ── -->
+  <div class="section">
+    <div class="section-label">04</div>
+    <h2>EXPLAIN ANALYZE — reading query plans</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label">how to run it</span></div>
+      <pre><span class="kw">const</span> plan = <span class="kw">await</span> prisma.<span class="fn">$queryRaw</span>`
+  EXPLAIN ANALYZE
+  SELECT * FROM "Post" WHERE "userId" = ${'uuid-123'}
+`
+console.<span class="fn">log</span>(<span class="type">JSON</span>.<span class="fn">stringify</span>(plan, <span class="kw">null</span>, <span class="num">2</span>))</pre>
+    </div>
+
+    <div class="scan-grid">
+      <div class="scan-card bad">
+        <h4>Seq Scan</h4>
+        <p>Full table scan. Reads every row. Dangerous on large tables. Needs an index.</p>
+      </div>
+      <div class="scan-card ok">
+        <h4>Bitmap Heap Scan</h4>
+        <p>Partial index usage. Batches multiple row lookups. Acceptable for low-selectivity queries.</p>
+      </div>
+      <div class="scan-card good">
+        <h4>Index Scan</h4>
+        <p>Using the index directly. Fast and efficient. What you want to see.</p>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">text</span><span class="code-label danger">Seq Scan output — bad</span></div>
+      <pre>Seq Scan on "Post"
+  (cost=<span class="num">0.00</span>..<span class="num">10420.00</span> rows=<span class="num">1</span> width=<span class="num">150</span>)
+  (actual time=<span class="bad">45.231</span>..<span class="bad">45.231</span> rows=<span class="num">1</span> loops=<span class="num">1</span>)
+  Filter: (userId = <span class="str">'uuid-123'</span>)
+  <span class="bad">Rows Removed by Filter: 99999</span>   <span class="cm">← scanned 100k rows to find 1</span></pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">text</span><span class="code-label good">Index Scan output — good</span></div>
+      <pre>Index Scan using <span class="good">"Post_userId_idx"</span> on "Post"
+  (cost=<span class="num">0.42</span>..<span class="num">8.44</span> rows=<span class="num">1</span> width=<span class="num">150</span>)
+  (actual time=<span class="good">0.043</span>..<span class="good">0.043</span> rows=<span class="num">1</span> loops=<span class="num">1</span>)
+  Index Cond: (userId = <span class="str">'uuid-123'</span>)  <span class="cm">← index doing the filtering</span></pre>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">What to look for</div>
+      <p>Seq Scan + large "Rows Removed by Filter" = needs an index. Index Scan + low actual time = working correctly. High cost estimate but low actual time = Postgres estimated wrong but executed well — acceptable.</p>
+    </div>
+  </div>
+
+  <!-- ── PARTIAL INDEXES ── -->
+  <div class="section">
+    <div class="section-label">05</div>
+    <h2>Partial indexes — index only a subset</h2>
+
+    <p>Index only rows matching a condition. Smaller index, faster lookups, less storage.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><span class="code-label">create via custom migration</span></div>
+      <pre><span class="cm"># Generate SQL without applying</span>
+npx prisma migrate dev --name add-partial-index --create-only
+
+<span class="cm"># Edit the generated migration.sql:</span></pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">sql</span><span class="code-label good">partial index — only published posts</span></div>
+      <pre><span class="cm">-- Only indexes published posts — much smaller than full index</span>
+CREATE INDEX <span class="good">"Post_userId_published_idx"</span>
+ON "Post"("userId")
+WHERE published = <span class="kw">true</span>;
+
+<span class="cm">-- Only indexes pending transactions</span>
+CREATE INDEX <span class="good">"Transaction_status_pending_idx"</span>
+ON "Transaction"("accountId")
+WHERE status = <span class="str">'PENDING'</span>;</pre>
+    </div>
+
+    <div class="callout rule">
+      <div class="callout-label">When to use partial indexes</div>
+      <p>When you frequently query a specific subset of rows — published posts, pending transactions, active users. The index is smaller (faster to build, less memory) and queries on that subset are faster. Prisma doesn't support partial indexes natively — always add via custom migration SQL.</p>
+    </div>
+  </div>
+
+  <!-- ── SLOW PATTERNS ── -->
+  <div class="section">
+    <div class="section-label">06</div>
+    <h2>Slow query patterns Prisma generates</h2>
+
+    <div class="slow-pattern">
+      <div class="slow-pattern-header">
+        <span class="slow-badge">Pattern 1</span>
+        <h4>Filtering on unindexed relation field</h4>
+      </div>
+      <p>Prisma generates a join + filter on an unindexed column — forces Seq Scan on the related table.</p>
+      <div class="code-block" style="margin-top:10px">
+        <div class="code-header"><span class="code-lang">typescript</span></div>
+        <pre><span class="cm">// ❌ name has no index → Seq Scan on UserBlog</span>
+prisma.post.<span class="fn">findMany</span>({
+  where: { user: { name: { contains: <span class="str">'anil'</span> } } }
+})
+<span class="cm">// Fix: @@index([name]) on UserBlog</span></pre>
+      </div>
+    </div>
+
+    <div class="slow-pattern">
+      <div class="slow-pattern-header">
+        <span class="slow-badge">Pattern 2</span>
+        <h4>Ordering on unindexed column</h4>
+      </div>
+      <p>Without an index on the sort column, Postgres sorts all matching rows in memory before returning results.</p>
+      <div class="code-block" style="margin-top:10px">
+        <div class="code-header"><span class="code-lang">typescript</span></div>
+        <pre><span class="cm">// ❌ no index on createdAt → in-memory sort of all rows</span>
+prisma.post.<span class="fn">findMany</span>({
+  orderBy: { createdAt: <span class="str">'desc'</span> },
+  take: <span class="num">10</span>
+})
+<span class="cm">// Fix: @@index([createdAt]) or @@index([userId, createdAt])</span></pre>
+      </div>
+    </div>
+
+    <div class="slow-pattern">
+      <div class="slow-pattern-header">
+        <span class="slow-badge">Pattern 3</span>
+        <h4>N+1 on unindexed FK</h4>
+      </div>
+      <p>Even with include, if the FK has no index, the IN clause causes a Seq Scan on the related table.</p>
+      <div class="code-block" style="margin-top:10px">
+        <div class="code-header"><span class="code-lang">typescript</span></div>
+        <pre><span class="cm">// include generates: SELECT * FROM Comment WHERE postId IN (...)</span>
+<span class="cm">// ❌ if postId has no index → Seq Scan on Comment</span>
+prisma.post.<span class="fn">findMany</span>({ include: { comments: <span class="kw">true</span> } })
+<span class="cm">// Fix: @@index([postId]) on Comment</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── FINTECH SCHEMA INDEXES ── -->
+  <div class="section">
+    <div class="section-label">07</div>
+    <h2>Fintech schema — recommended indexes</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">prisma</span><span class="code-label good">production-ready index setup</span></div>
+      <pre><span class="kw">model</span> <span class="type">Transaction</span> {
+  id             <span class="type">String</span>            <span class="dec">@id</span>      <span class="cm">// PK — always indexed</span>
+  idempotencyKey <span class="type">String</span>            <span class="dec">@unique</span>  <span class="cm">// unique — auto-indexed</span>
+  accountId      <span class="type">String</span>
+  status         <span class="type">TransactionStatus</span>
+  createdAt      <span class="type">DateTime</span>          <span class="dec">@default</span>(<span class="fn">now</span>())
+
+  <span class="cm">// Most queries filter by account + time range</span>
+  <span class="dec">@@index</span>([accountId, createdAt])
+
+  <span class="cm">// Partial index for pending — via custom migration SQL</span>
+  <span class="cm">// CREATE INDEX ON "Transaction"("accountId") WHERE status = 'PENDING'</span>
+}
+
+<span class="kw">model</span> <span class="type">Account</span> {
+  id     <span class="type">String</span> <span class="dec">@id</span>
+  userId <span class="type">String</span>
+
+  <span class="dec">@@index</span>([userId])  <span class="cm">// findByUserId is the most common query</span>
+}
+
+<span class="kw">model</span> <span class="type">Post</span> {
+  id        <span class="type">String</span>  <span class="dec">@id</span>
+  userId    <span class="type">String</span>
+  published <span class="type">Boolean</span>
+  createdAt <span class="type">DateTime</span>
+
+  <span class="dec">@@index</span>([userId, createdAt])  <span class="cm">// user feed — filter by user, sort by time</span>
+}
+
+<span class="kw">model</span> <span class="type">Comment</span> {
+  id     <span class="type">String</span> <span class="dec">@id</span>
+  postId <span class="type">String</span>
+  userId <span class="type">String</span>
+
+  <span class="dec">@@index</span>([postId])  <span class="cm">// include comments — postId IN (...) needs this</span>
+  <span class="dec">@@index</span>([userId])  <span class="cm">// find comments by user</span>
+}
+
+<span class="kw">model</span> <span class="type">AuditLog</span> {
+  id        <span class="type">String</span>  <span class="dec">@id</span>
+  model     <span class="type">String</span>
+  recordId  <span class="type">String</span>
+  createdAt <span class="type">DateTime</span>
+
+  <span class="dec">@@index</span>([model, recordId])  <span class="cm">// lookup audit history for a record</span>
+  <span class="dec">@@index</span>([createdAt])        <span class="cm">// time-range queries on audit log</span>
+}</pre>
+    </div>
+  </div>
+
+  <!-- ── WORKFLOW ── -->
+  <div class="section">
+    <div class="section-label">08</div>
+    <h2>Slow query workflow</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Step</th><th>Action</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1. Spot</td>
+            <td class="desc">Enable <code>log: ['query']</code> — slow queries appear in terminal with high ms</td>
+          </tr>
+          <tr>
+            <td>2. Diagnose</td>
+            <td class="desc">Run <code>EXPLAIN ANALYZE</code> on the slow query — look for Seq Scan</td>
+          </tr>
+          <tr>
+            <td>3. Fix — index</td>
+            <td class="desc">Add <code>@@index</code> in schema → <code>migrate dev</code> → rerun EXPLAIN ANALYZE</td>
+          </tr>
+          <tr>
+            <td>4. Fix — raw SQL</td>
+            <td class="desc">If Prisma's generated SQL is suboptimal — rewrite as <code>$queryRaw</code></td>
+          </tr>
+          <tr>
+            <td>5. Production</td>
+            <td class="desc">Use <code>CREATE INDEX CONCURRENTLY</code> via custom migration — no table lock</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout interview">
+      <div class="callout-label">Interview answer — finding and fixing slow queries</div>
+      <p>"Enable <code>log: ['query']</code> to spot slow queries in the terminal. Run EXPLAIN ANALYZE — look for Seq Scan with high rows-removed count. Add <code>@@index</code> for the filtered column, or a composite index if filtering on multiple columns. For production tables use <code>CREATE INDEX CONCURRENTLY</code> via a custom migration to avoid locking the table."</p>
+    </div>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">09</div>
+    <h2>Day 15 summary</h2>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h4>@@index</h4>
+        <p>Single field or composite. @id, @unique, @@unique all auto-create indexes.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Composite order</h4>
+        <p>Leading column must be in query. @@index([a, b]) helps filter by a or a+b. Not b alone.</p>
+      </div>
+      <div class="summary-card">
+        <h4>EXPLAIN ANALYZE</h4>
+        <p>Seq Scan = bad. Index Scan = good. Bitmap Heap Scan = acceptable. High rows-removed = needs index.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Partial index</h4>
+        <p>WHERE clause on index. Smaller, faster for specific subsets. Add via custom migration SQL only.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Slow patterns</h4>
+        <p>Unindexed relation filter, unindexed orderBy column, unindexed FK in include.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Production</h4>
+        <p>Always CREATE INDEX CONCURRENTLY on large tables — no table lock, zero downtime.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Prisma Study Plan · April 2025 · Anil</p>
+  <span class="next-day">Day 16 → Connection pooling</span>
+</footer>
+
+</body>
+</html>
