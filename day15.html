@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prisma Day 16 — Connection Pooling</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Fraunces:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: #2a2a2a;
+    --accent: #5DCAA5;
+    --accent2: #7F77DD;
+    --warn: #EF9F27;
+    --danger: #E24B4A;
+    --blue: #85B7EB;
+    --text: #e8e8e2;
+    --muted: #888880;
+    --faint: #444440;
+    --mono: 'JetBrains Mono', monospace;
+    --serif: 'Fraunces', serif;
+    --sans: 'DM Sans', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.7; }
+
+  header { border-bottom: 1px solid var(--border); padding: 48px 60px 40px; position: relative; overflow: hidden; }
+  header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 300px; height: 300px; background: radial-gradient(circle, rgba(127,119,221,0.07) 0%, transparent 70%); pointer-events: none; }
+  .header-tag { font-family: var(--mono); font-size: 11px; color: var(--accent2); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  header h1 { font-family: var(--serif); font-size: 36px; font-weight: 600; color: #fff; line-height: 1.2; margin-bottom: 8px; }
+  header h1 em { font-style: italic; color: var(--accent2); }
+  header p { font-size: 14px; color: var(--muted); max-width: 560px; }
+  .header-meta { display: flex; gap: 24px; margin-top: 24px; flex-wrap: wrap; }
+  .meta-chip { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); padding: 4px 12px; border-radius: 20px; }
+  .meta-chip span { color: var(--text); }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 48px 60px 80px; }
+
+  .section { margin-bottom: 52px; }
+  .section-label { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent2); margin-bottom: 6px; }
+  .section h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
+  p { color: var(--text); margin-bottom: 12px; line-height: 1.75; }
+  p:last-child { margin-bottom: 0; }
+
+  .code-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 16px 0; overflow: hidden; }
+  .code-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .code-lang { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .code-label { font-family: var(--mono); font-size: 10px; color: var(--accent2); }
+  .code-label.good { color: var(--accent); }
+  .code-label.danger { color: var(--danger); }
+  .code-label.warn { color: var(--warn); }
+  pre { padding: 20px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; color: var(--text); }
+  .kw { color: #7F77DD; }
+  .str { color: #5DCAA5; }
+  .cm { color: #555550; font-style: italic; }
+  .dec { color: #EF9F27; }
+  .type { color: #85B7EB; }
+  .num { color: #F0997B; }
+  .fn { color: #e8e8e2; }
+  .good { color: #5DCAA5; }
+  .bad { color: #E24B4A; }
+
+  code { font-family: var(--mono); font-size: 12px; background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--accent); }
+
+  .callout { border-left: 3px solid; border-radius: 0 6px 6px 0; padding: 14px 18px; margin: 16px 0; }
+  .callout-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+  .callout p { margin: 0; font-size: 13px; }
+  .callout.interview { border-color: var(--warn); background: rgba(239,159,39,0.06); }
+  .callout.interview .callout-label { color: var(--warn); }
+  .callout.gotcha { border-color: var(--danger); background: rgba(226,75,74,0.06); }
+  .callout.gotcha .callout-label { color: var(--danger); }
+  .callout.tip { border-color: var(--accent); background: rgba(93,202,165,0.06); }
+  .callout.tip .callout-label { color: var(--accent); }
+  .callout.rule { border-color: var(--accent2); background: rgba(127,119,221,0.06); }
+  .callout.rule .callout-label { color: var(--accent2); }
+
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); padding: 10px 14px; text-align: left; font-weight: 400; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--mono); font-size: 12px; color: var(--accent2); }
+  td.desc { color: var(--muted); font-size: 13px; }
+  td.good { color: var(--accent); font-size: 13px; }
+  td.bad { color: var(--danger); font-size: 13px; }
+  td.ok { color: var(--warn); font-size: 13px; }
+
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .compare-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .compare-card h4 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .compare-card.bad h4 { color: var(--danger); }
+  .compare-card.good h4 { color: var(--accent); }
+  .compare-card ul { list-style: none; padding: 0; }
+  .compare-card ul li { font-size: 12.5px; color: var(--muted); padding: 4px 0 4px 14px; position: relative; border-bottom: 1px solid var(--faint); }
+  .compare-card ul li:last-child { border-bottom: none; }
+  .compare-card ul li::before { content: '›'; position: absolute; left: 2px; }
+  .compare-card.bad ul li::before { color: var(--danger); }
+  .compare-card.good ul li::before { color: var(--accent); }
+
+  .mode-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 16px 0; }
+  .mode-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; border-left: 3px solid; }
+  .mode-card.session { border-left-color: var(--accent); }
+  .mode-card.transaction { border-left-color: var(--warn); }
+  .mode-card.statement { border-left-color: var(--danger); }
+  .mode-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .mode-name { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+  .mode-card.session .mode-name { color: var(--accent); }
+  .mode-card.transaction .mode-name { color: var(--warn); }
+  .mode-card.statement .mode-name { color: var(--danger); }
+  .mode-badge { font-family: var(--mono); font-size: 10px; padding: 2px 8px; border-radius: 10px; }
+  .mode-card.session .mode-badge { background: rgba(93,202,165,0.15); color: var(--accent); }
+  .mode-card.transaction .mode-badge { background: rgba(239,159,39,0.15); color: var(--warn); }
+  .mode-card.statement .mode-badge { background: rgba(226,75,74,0.15); color: var(--danger); }
+  .mode-card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  .timeline { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin: 16px 0; }
+  .timeline h4 { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
+  .timeline-row { display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--faint); align-items: flex-start; font-family: var(--mono); font-size: 12px; }
+  .timeline-row:last-child { border-bottom: none; }
+  .timeline-time { color: var(--faint); width: 40px; flex-shrink: 0; }
+  .timeline-who { color: var(--accent2); width: 60px; flex-shrink: 0; }
+  .timeline-what { color: var(--muted); }
+  .timeline-what span { color: var(--text); }
+  .timeline-what .conn { color: var(--accent); }
+  .timeline-what .bad { color: var(--danger); }
+  .timeline-what .good { color: var(--accent); }
+
+  .lambda-flow { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 16px 0; }
+  .lambda-step { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; display: flex; gap: 12px; align-items: flex-start; }
+  .lambda-badge { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
+  .lambda-badge.cold { background: rgba(226,75,74,0.15); color: var(--danger); }
+  .lambda-badge.warm { background: rgba(93,202,165,0.15); color: var(--accent); }
+  .lambda-badge.cache { background: rgba(127,119,221,0.15); color: var(--accent2); }
+  .lambda-text { font-size: 12.5px; color: var(--muted); }
+  .lambda-text span { color: var(--text); font-family: var(--mono); font-size: 12px; }
+
+  .idle-flow { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 16px 0; }
+  .idle-step { display: flex; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--faint); align-items: flex-start; }
+  .idle-step:last-child { border-bottom: none; }
+  .idle-num { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--bg); background: var(--accent2); width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .idle-body h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+  .idle-body p { font-size: 12px; color: var(--muted); margin: 0; font-family: var(--mono); }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; border-top: 2px solid var(--accent2); }
+  .summary-card h4 { font-family: var(--mono); font-size: 11px; color: var(--accent2); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .summary-card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  footer { border-top: 1px solid var(--border); padding: 24px 60px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  footer p { font-family: var(--mono); font-size: 11px; color: var(--faint); margin: 0; }
+  .next-day { font-family: var(--mono); font-size: 11px; color: var(--accent); background: rgba(93,202,165,0.08); border: 1px solid rgba(93,202,165,0.2); padding: 6px 14px; border-radius: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">Prisma Study Plan · April 2025</div>
+  <h1>Day 16 — <em>Connection Pooling</em></h1>
+  <p>Singleton pattern · connection_limit · PgBouncer modes · RDS Proxy · Lambda · idle in transaction</p>
+  <div class="header-meta">
+    <div class="meta-chip">Phase <span>4 of 5</span></div>
+    <div class="meta-chip">Date <span>Wed Apr 23</span></div>
+    <div class="meta-chip">Stack <span>Prisma 5 · TS · Neon · AWS</span></div>
+    <div class="meta-chip">Status <span style="color:#5DCAA5">✓ Complete</span></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── WHAT IS A CONNECTION POOL ── -->
+  <div class="section">
+    <div class="section-label">01</div>
+    <h2>What is a connection pool?</h2>
+
+    <p>Opening a new DB connection is expensive — TCP handshake, SSL, Postgres auth = 50–200ms. A pool keeps connections warm and reusable.</p>
+
+    <div class="compare-grid">
+      <div class="compare-card bad">
+        <h4>Without pool — expensive</h4>
+        <ul>
+          <li>New connection per query</li>
+          <li>50-200ms overhead every time</li>
+          <li>Connections discarded after use</li>
+          <li>DB overwhelmed under load</li>
+        </ul>
+      </div>
+      <div class="compare-card good">
+        <h4>With pool — reused</h4>
+        <ul>
+          <li>Connections opened once at startup</li>
+          <li>Grabbed from pool for each query</li>
+          <li>Returned to pool after use</li>
+          <li>Near-zero overhead per query</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SINGLETON ── -->
+  <div class="section">
+    <div class="section-label">02</div>
+    <h2>PrismaClient singleton — the most important rule</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label danger">wrong — new client per request</span></div>
+      <pre><span class="cm">// ❌ Opens new connection pool on EVERY request</span>
+app.<span class="fn">get</span>(<span class="str">'/posts'</span>, <span class="kw">async</span> (req, res) => {
+  <span class="kw">const</span> prisma = <span class="kw">new</span> <span class="type">PrismaClient</span>()   <span class="cm">// new pool every request</span>
+  <span class="kw">const</span> posts = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>()
+  <span class="kw">await</span> prisma.<span class="fn">$disconnect</span>()
+  res.<span class="fn">json</span>(posts)
+})
+<span class="cm">// 1000 req/sec = 1000 pools = DB overwhelmed</span></pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">correct — singleton shared across all requests</span></div>
+      <pre><span class="cm">// ✅ One pool, created once at startup</span>
+<span class="kw">const</span> prisma = <span class="kw">new</span> <span class="type">PrismaClient</span>()
+
+app.<span class="fn">get</span>(<span class="str">'/posts'</span>, <span class="kw">async</span> (req, res) => {
+  <span class="kw">const</span> posts = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>()  <span class="cm">// reuses pool</span>
+  res.<span class="fn">json</span>(posts)
+})</pre>
+    </div>
+
+    <div class="callout rule">
+      <div class="callout-label">How the singleton is saved</div>
+      <p>Node.js module cache — when a file is first imported, its top-level code runs once and the exports are cached. Every subsequent import in the same process gets the same object. Module level = born when file loads, lives as long as the process. Function level = born on every call, dies when function returns.</p>
+    </div>
+  </div>
+
+  <!-- ── LAMBDA SINGLETON ── -->
+  <div class="section">
+    <div class="section-label">03</div>
+    <h2>Lambda singleton — the global cache pattern</h2>
+
+    <p>Lambda containers are ephemeral. Code outside the handler runs once per container (cold start) and is reused on warm starts.</p>
+
+    <div class="lambda-flow">
+      <div class="lambda-step">
+        <span class="lambda-badge cold">cold start</span>
+        <span class="lambda-text">New container → <span>module loads → new PrismaClient() created → cached</span></span>
+      </div>
+      <div class="lambda-step">
+        <span class="lambda-badge warm">warm start</span>
+        <span class="lambda-text">Same container → <span>module already cached → PrismaClient reused → no new connection</span></span>
+      </div>
+      <div class="lambda-step">
+        <span class="lambda-badge cold">cold start</span>
+        <span class="lambda-text">New container (concurrent) → <span>fresh module load → new PrismaClient() → new connection</span></span>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">src/lib/prisma.ts — production pattern</span></div>
+      <pre><span class="kw">import</span> { <span class="type">PrismaClient</span> } <span class="kw">from</span> <span class="str">'@prisma/client'</span>
+
+<span class="cm">// Tell TypeScript global can have a prisma property</span>
+<span class="kw">declare global</span> {
+  <span class="kw">var</span> prisma: <span class="type">PrismaClient</span> | <span class="kw">undefined</span>
+}
+
+<span class="cm">// ?? = use existing if not null/undefined, create new if null</span>
+<span class="kw">const</span> prisma = global.prisma ?? <span class="kw">new</span> <span class="type">PrismaClient</span>({
+  datasources: {
+    db: { url: process.env.<span class="type">DATABASE_URL</span> + <span class="str">'?connection_limit=1'</span> }
+    <span class="cm">//                                              ↑</span>
+    <span class="cm">//                          1 connection per Lambda instance</span>
+  }
+})
+
+<span class="cm">// In dev — cache on global so hot-reload doesn't create new instances</span>
+<span class="cm">// In prod — global.prisma never set, always creates fresh per container</span>
+<span class="kw">if</span> (process.env.<span class="type">NODE_ENV</span> !== <span class="str">'production'</span>) {
+  global.prisma = prisma
+}
+
+<span class="kw">export default</span> prisma</pre>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">Why connection_limit=1 for Lambda</div>
+      <p>100 concurrent Lambda invocations = 100 containers. With default limit of 10: 100 × 10 = 1000 connections. With limit of 1: 100 × 1 = 100 connections. Predictable and manageable. Use RDS Proxy to multiplex further.</p>
+    </div>
+  </div>
+
+  <!-- ── CONNECTION LIMIT ── -->
+  <div class="section">
+    <div class="section-label">04</div>
+    <h2>connection_limit — how to calculate</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Scenario</th><th>RDS max</th><th>Reserve</th><th>Usable</th><th>Instances</th><th>Per instance</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>ECS + db.t3.medium</td>
+            <td class="desc">340</td>
+            <td class="desc">40 admin</td>
+            <td class="desc">300</td>
+            <td class="desc">10 tasks</td>
+            <td class="good">300 ÷ 10 = 30</td>
+          </tr>
+          <tr>
+            <td>Lambda + db.t3.micro</td>
+            <td class="desc">85</td>
+            <td class="desc">25 admin</td>
+            <td class="desc">60</td>
+            <td class="desc">60 max concurrent</td>
+            <td class="good">1 per Lambda</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">Common mistake</div>
+      <p>Setting <code>connection_limit=300</code> on each of 10 ECS tasks = 3000 attempted connections. RDS rejects everything. Always divide total usable connections by number of instances/tasks running simultaneously.</p>
+    </div>
+  </div>
+
+  <!-- ── PGBOUNCER ── -->
+  <div class="section">
+    <div class="section-label">05</div>
+    <h2>PgBouncer — the connection pooler</h2>
+
+    <p>Sits between your app and Postgres. Takes many app connections, forwards only a few to Postgres. Like a hotel receptionist — handles 1000 guests but only sends 20 to the manager at a time.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">text</span><span class="code-label">architecture</span></div>
+      <pre>Your App (100 connections) → PgBouncer → Postgres (20 connections)
+                                  ↑
+                     queues requests when all 20 are busy
+                     app never sees connection refused</pre>
+    </div>
+
+    <div class="mode-grid">
+      <div class="mode-card session">
+        <div class="mode-card-header">
+          <span class="mode-name">Session mode</span>
+          <span class="mode-badge">safe</span>
+        </div>
+        <p>One Postgres connection per client session. Released when client disconnects. Transactions work fine — same connection throughout. Less efficient — 100 clients = 100 Postgres connections.</p>
+      </div>
+      <div class="mode-card transaction">
+        <div class="mode-card-header">
+          <span class="mode-name">Transaction mode</span>
+          <span class="mode-badge">efficient but needs pgbouncer=true</span>
+        </div>
+        <p>One Postgres connection per transaction. Released immediately after COMMIT. 1000 app connections → 20 Postgres connections. Breaks Prisma interactive transactions unless <code>pgbouncer=true</code> is set.</p>
+      </div>
+      <div class="mode-card statement">
+        <div class="mode-card-header">
+          <span class="mode-name">Statement mode</span>
+          <span class="mode-badge">never use with Prisma</span>
+        </div>
+        <p>One Postgres connection per query. Most aggressive. Breaks transactions, prepared statements, session variables. Never use with Prisma.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TRANSACTION MODE DEEP DIVE ── -->
+  <div class="section">
+    <div class="section-label">06</div>
+    <h2>Why transaction mode breaks Prisma — with real example</h2>
+
+    <p>10 users making transfers. PgBouncer has 3 Postgres connections (C1, C2, C3).</p>
+
+    <div class="timeline">
+      <h4>Transaction mode — connection assignment timeline</h4>
+      <div class="timeline-row">
+        <span class="timeline-time">t=0</span>
+        <span class="timeline-who">User 1</span>
+        <span class="timeline-what">sends BEGIN → PgBouncer assigns <span class="conn">C1</span></span>
+      </div>
+      <div class="timeline-row">
+        <span class="timeline-time">t=1</span>
+        <span class="timeline-who">User 2</span>
+        <span class="timeline-what">sends BEGIN → PgBouncer assigns <span class="conn">C2</span></span>
+      </div>
+      <div class="timeline-row">
+        <span class="timeline-time">t=2</span>
+        <span class="timeline-who">User 3</span>
+        <span class="timeline-what">sends BEGIN → PgBouncer assigns <span class="conn">C3</span></span>
+      </div>
+      <div class="timeline-row">
+        <span class="timeline-time">t=3</span>
+        <span class="timeline-who">User 3</span>
+        <span class="timeline-what">sends COMMIT → <span class="conn">C3</span> <span class="good">returned to pool</span></span>
+      </div>
+      <div class="timeline-row">
+        <span class="timeline-time">t=4</span>
+        <span class="timeline-who">User 4</span>
+        <span class="timeline-what">sends BEGIN → PgBouncer assigns <span class="conn">C3</span> (just freed)</span>
+      </div>
+      <div class="timeline-row">
+        <span class="timeline-time">t=5</span>
+        <span class="timeline-who">User 1</span>
+        <span class="timeline-what">sends COMMIT → <span class="conn">C1</span> <span class="good">returned to pool</span></span>
+      </div>
+    </div>
+
+    <p style="margin-top:16px">This works fine for simple queries. The problem is with Prisma's interactive transactions:</p>
+
+    <div class="timeline">
+      <h4>Prisma $transaction — breaks in transaction mode</h4>
+      <div class="timeline-row">
+        <span class="timeline-time">t=0</span>
+        <span class="timeline-who">Prisma</span>
+        <span class="timeline-what">sends BEGIN → PgBouncer assigns <span class="conn">C1</span></span>
+      </div>
+      <div class="timeline-row">
+        <span class="timeline-time">t=1</span>
+        <span class="timeline-who">Prisma</span>
+        <span class="timeline-what">sends SELECT balance → <span class="conn">C1</span> used, result returned</span>
+      </div>
+      <div class="timeline-row">
+        <span class="timeline-time">t=2</span>
+        <span class="timeline-who">PgBouncer</span>
+        <span class="timeline-what"><span class="bad">thinks query done → releases C1 back to pool</span></span>
+      </div>
+      <div class="timeline-row">
+        <span class="timeline-time">t=3</span>
+        <span class="timeline-who">Prisma</span>
+        <span class="timeline-what">sends UPDATE balance → PgBouncer assigns <span class="bad">C2</span> (different connection!)</span>
+      </div>
+      <div class="timeline-row">
+        <span class="timeline-time">t=4</span>
+        <span class="timeline-who">Postgres</span>
+        <span class="timeline-what"><span class="bad">C2 has no open transaction → UPDATE auto-commits without validation check</span></span>
+      </div>
+      <div class="timeline-row">
+        <span class="timeline-time">t=5</span>
+        <span class="timeline-who">Prisma</span>
+        <span class="timeline-what">sends COMMIT → PgBouncer assigns <span class="bad">C3</span> → "no open transaction" error</span>
+      </div>
+    </div>
+
+    <div class="callout gotcha">
+      <div class="callout-label">Real world consequence</div>
+      <p>Balance check ran on C1. UPDATE ran on C2 (auto-committed, no transaction). The validation and the write were on different connections — never in the same transaction. Money can go negative. Data corrupted silently.</p>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">text</span><span class="code-label good">fix — pgbouncer=true in connection string</span></div>
+      <pre>DATABASE_URL="postgresql://user:pass@pgbouncer:6432/db<span class="good">?pgbouncer=true</span>"
+
+<span class="cm">// pgbouncer=true tells Prisma to use SET LOCAL instead of BEGIN/COMMIT</span>
+<span class="cm">// PgBouncer recognizes SET LOCAL and pins the connection</span>
+<span class="cm">// for the entire transaction — same connection throughout</span></pre>
+    </div>
+  </div>
+
+  <!-- ── RDS PROXY ── -->
+  <div class="section">
+    <div class="section-label">07</div>
+    <h2>RDS Proxy — managed pooling on AWS</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">text</span><span class="code-label">architecture</span></div>
+      <pre>Lambda / ECS tasks → RDS Proxy → RDS instance
+                          ↑
+              AWS managed — no ops overhead
+              multiplexes thousands → tens of connections
+              IAM auth + automatic failover</pre>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Feature</th><th>PgBouncer</th><th>RDS Proxy</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Management</td>
+            <td class="desc">Self-managed</td>
+            <td class="good">AWS managed</td>
+          </tr>
+          <tr>
+            <td>Auth</td>
+            <td class="desc">Password</td>
+            <td class="good">IAM + Secrets Manager</td>
+          </tr>
+          <tr>
+            <td>Failover</td>
+            <td class="desc">Manual config</td>
+            <td class="good">Automatic to read replica</td>
+          </tr>
+          <tr>
+            <td>Use when</td>
+            <td class="desc">Self-hosted Postgres</td>
+            <td class="good">AWS RDS (your setup)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── IDLE IN TRANSACTION ── -->
+  <div class="section">
+    <div class="section-label">08</div>
+    <h2>idle in transaction — detecting and fixing</h2>
+
+    <p>A transaction was opened (BEGIN sent) but never committed or rolled back. The connection is poisoned — if reused from the pool, queries run inside an old uncommitted transaction.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label danger">the bug — missing ROLLBACK in catch</span></div>
+      <pre><span class="kw">async function</span> <span class="fn">transfer</span>() {
+  <span class="kw">await</span> prisma.<span class="fn">$executeRaw</span>`BEGIN`
+
+  <span class="kw">try</span> {
+    <span class="kw">await</span> prisma.<span class="fn">$executeRaw</span>`UPDATE "Account" SET balance = balance - 1000 ...`
+    <span class="kw">throw new</span> <span class="type">Error</span>(<span class="str">'Something failed'</span>)   <span class="cm">// error thrown</span>
+    <span class="kw">await</span> prisma.<span class="fn">$executeRaw</span>`COMMIT`     <span class="cm">// never reached</span>
+  } <span class="kw">catch</span> (error) {
+    <span class="bad">// ❌ forgot ROLLBACK — connection returned to pool with BEGIN still open</span>
+    <span class="kw">throw</span> error
+  }
+}
+<span class="cm">// Connection state: "idle in transaction" — poisoned</span></pre>
+    </div>
+
+    <div class="idle-flow">
+      <div class="idle-step">
+        <div class="idle-num">1</div>
+        <div class="idle-body">
+          <h4>Detect</h4>
+          <p>SELECT pid, state, now() - state_change as duration FROM pg_stat_activity WHERE state = 'idle in transaction'</p>
+        </div>
+      </div>
+      <div class="idle-step">
+        <div class="idle-num">2</div>
+        <div class="idle-body">
+          <h4>Kill stuck connection</h4>
+          <p>SELECT pg_terminate_backend(pid) — terminates the specific stuck connection</p>
+        </div>
+      </div>
+      <div class="idle-step">
+        <div class="idle-num">3</div>
+        <div class="idle-body">
+          <h4>Fix root cause</h4>
+          <p>Use prisma.$transaction() — handles COMMIT and ROLLBACK automatically, can't forget</p>
+        </div>
+      </div>
+      <div class="idle-step">
+        <div class="idle-num">4</div>
+        <div class="idle-body">
+          <h4>Prevent automatically</h4>
+          <p>Set timeout: 10000 on $transaction — Prisma kills transactions that take too long</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">Why $transaction prevents this</div>
+      <p>Prisma's <code>$transaction()</code> wraps everything in try/catch internally. If anything throws — Prisma automatically sends ROLLBACK before rethrowing. You physically can't forget the ROLLBACK because you never write it manually.</p>
+    </div>
+  </div>
+
+  <!-- ── WHICH TO USE WHEN ── -->
+  <div class="section">
+    <div class="section-label">09</div>
+    <h2>Which pooling solution — when</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Setup</th><th>Solution</th><th>connection_limit</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Local dev</td>
+            <td class="desc">Default PrismaClient — no pooler needed</td>
+            <td class="desc">default (10)</td>
+          </tr>
+          <tr>
+            <td>ECS Fargate + RDS</td>
+            <td class="good">RDS Proxy</td>
+            <td class="desc">usable ÷ task count</td>
+          </tr>
+          <tr>
+            <td>Lambda + RDS</td>
+            <td class="good">RDS Proxy + limit=1</td>
+            <td class="desc">1 per Lambda instance</td>
+          </tr>
+          <tr>
+            <td>Self-hosted Postgres</td>
+            <td class="ok">PgBouncer session mode</td>
+            <td class="desc">usable ÷ instance count</td>
+          </tr>
+          <tr>
+            <td>Serverless / edge</td>
+            <td class="ok">Prisma Accelerate</td>
+            <td class="desc">managed</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">10</div>
+    <h2>Day 16 summary</h2>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h4>Singleton</h4>
+        <p>One PrismaClient per process. Module cache saves it. Never instantiate inside a request handler.</p>
+      </div>
+      <div class="summary-card">
+        <h4>connection_limit</h4>
+        <p>Total usable ÷ number of instances. Leave headroom for admin. 1 per Lambda instance.</p>
+      </div>
+      <div class="summary-card">
+        <h4>PgBouncer modes</h4>
+        <p>Session = safe. Transaction = efficient but needs pgbouncer=true. Statement = never use.</p>
+      </div>
+      <div class="summary-card">
+        <h4>pgbouncer=true</h4>
+        <p>Tells Prisma to pin connection for transaction duration. Required for $transaction in transaction mode.</p>
+      </div>
+      <div class="summary-card">
+        <h4>RDS Proxy</h4>
+        <p>AWS managed pooler. IAM auth, automatic failover, multiplexing. Best choice for ECS + RDS.</p>
+      </div>
+      <div class="summary-card">
+        <h4>idle in transaction</h4>
+        <p>Missing ROLLBACK in error paths. Use $transaction() to prevent — it handles ROLLBACK automatically.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Prisma Study Plan · April 2025 · Anil</p>
+  <span class="next-day">Day 17 → Prisma in Lambda + ECS</span>
+</footer>
+
+</body>
+</html>
