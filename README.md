@@ -357,9 +357,9 @@ const posts = await prisma.post.findMany({
 ```typescript
 prisma.post.findMany({
   include: {
-    user: { select: { name: true } },     // post author
+    user: { select: { name: true } },
     comments: {
-      include: { user: { select: { name: true } } }  // comment authors
+      include: { user: { select: { name: true } } }
     }
   }
 })
@@ -393,7 +393,7 @@ Simple but degrades at scale — `OFFSET 10000` scans 10,000 rows to return 10.
 async function getPostsCursor({ take, cursor }: { take: number, cursor?: string }) {
   const posts = await prisma.post.findMany({
     take,
-    skip: cursor ? 1 : 0,          // skip cursor itself
+    skip: cursor ? 1 : 0,
     cursor: cursor ? { id: cursor } : undefined,
     orderBy: { createdAt: 'desc' }
   })
@@ -411,16 +411,9 @@ async function getPostsCursor({ take, cursor }: { take: number, cursor?: string 
 
 ### Sorting
 ```typescript
-// Single field
 { orderBy: { createdAt: 'desc' } }
-
-// Multiple fields — primary first, tiebreaker second
 { orderBy: [{ published: 'desc' }, { createdAt: 'desc' }] }
-
-// By relation field
 { orderBy: { user: { name: 'asc' } } }
-
-// By aggregation — users with most posts first
 { orderBy: { posts: { _count: 'desc' } } }
 ```
 
@@ -451,11 +444,9 @@ where: {
 
 ### Aggregations
 ```typescript
-// count
 await prisma.post.count()
 await prisma.post.count({ where: { published: true } })
 
-// aggregate
 await prisma.userBlog.aggregate({
   _count: { id: true },
   _avg: { age: true },
@@ -470,8 +461,8 @@ await prisma.userBlog.aggregate({
 await prisma.post.groupBy({
   by: ['userId'],
   _count: { id: true },
-  orderBy: { _count: { id: 'desc' } },  // extra nesting — sorting by aggregated value
-  having: { id: { _count: { gte: 2 } } }  // filter groups after aggregation
+  orderBy: { _count: { id: 'desc' } },
+  having: { id: { _count: { gte: 2 } } }
 })
 ```
 
@@ -479,24 +470,13 @@ await prisma.post.groupBy({
 - `where` — filters rows **before** grouping
 - `having` — filters groups **after** aggregation
 
-### orderBy syntax in groupBy
-```
-Normal orderBy:  { field: direction }
-groupBy orderBy: { aggregation: { field: direction } }  // one extra level
-```
-
 ### When to use $queryRaw
-Complex aggregations, window functions, CTEs — raw SQL is cleaner. Add TypeScript generic for type safety:
+Complex aggregations, window functions, CTEs — raw SQL is cleaner:
 ```typescript
 const result = await prisma.$queryRaw<{ userId: string; count: number }[]>`
   SELECT "userId", COUNT("id")::int as count FROM "Post" GROUP BY "userId"
 `
 ```
-
-### Mistakes made
-- `_count: { userId: true }` — use `id` not `userId` for counting records
-- `orderBy: { _count: 'desc' }` — missing field inside aggregation
-- Used `aggregate` instead of `groupBy` for having clause
 
 ---
 
@@ -513,72 +493,397 @@ const result = await prisma.$queryRaw<{ userId: string; count: number }[]>`
 | Use in | Local dev | CI/CD, production |
 
 ### Shadow database
-Temporary clean DB Prisma creates and destroys automatically. Replays all existing migrations to get "before" state, then diffs against current schema to generate new migration SQL. Never interact with it directly.
-
-### Never edit a migration after applying
-Every migration has a checksum in `_prisma_migrations`. Editing after applying causes checksum mismatch → blocks all future migrations → production outage.
+Temporary clean DB Prisma creates and destroys automatically. Replays all existing migrations to get "before" state, diffs against current schema to generate new migration SQL.
 
 ### Expand-contract — zero-downtime column rename
 ```
-❌ DANGEROUS: ALTER TABLE "User" RENAME COLUMN "fullName" TO "name"
-   → locks table + breaks running code
-
-✅ SAFE — expand-contract:
-
-Phase 1 (Expand):
-  Migration: ADD COLUMN "name", backfill from "fullName"
-  Deploy: code writes to BOTH columns
-
-Phase 2 (Contract):
-  Deploy: code only uses "name"
-  Migration: DROP COLUMN "fullName"
+Phase 1 (Expand): ADD COLUMN "name", backfill from "fullName", deploy dual-write code
+Phase 2 (Contract): deploy code using "name" only, DROP COLUMN "fullName"
 ```
 
 ### Failed migration recovery
 ```bash
-npx prisma migrate status                          # see what failed
-
-# Option A — revert partial changes manually, then:
+npx prisma migrate status
 npx prisma migrate resolve --rolled-back "migration_name"
-
-# Option B — finish SQL manually, then:
 npx prisma migrate resolve --applied "migration_name"
 ```
 
-### Can you re-run a failed migration?
-Not directly — Prisma blocks re-runs. Most generated SQL is not idempotent. Fix: `resolve --rolled-back` → edit SQL to add `IF NOT EXISTS` guards → create new migration → deploy.
-
-### CONCURRENTLY — index without table lock
-```bash
-# Generate SQL without applying
-npx prisma migrate dev --name add-email-index --create-only
-
-# Edit generated SQL:
-# Change: CREATE INDEX "idx" ON "User"("email")
-# To:     CREATE INDEX CONCURRENTLY "idx" ON "User"("email")
-
-# Apply
-npx prisma migrate dev
-```
-
-| | Normal INDEX | CONCURRENTLY |
-|---|---|---|
-| Table lock | Yes — blocks all queries | No |
-| Build speed | Faster | 2-3x slower |
-| In transaction | Yes | No |
-| Use when | Small tables | Large production tables |
-
-If CONCURRENTLY fails → leaves INVALID index → must `DROP INDEX CONCURRENTLY` and retry.
-
-### Idempotent SQL — safe to run multiple times
+### Idempotent SQL
 ```sql
--- Each line has a guard — "only act if work not done yet"
 ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "name" TEXT;
 UPDATE "User" SET "name" = "fullName" WHERE "name" IS NULL;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "User_name_idx" ON "User"("name");
 ```
 
-**Idempotent** = run once or ten times, same result. Don't overwrite or duplicate existing data.
+---
+
+## Day 11 — Transactions
+**Tue Apr 15**
+
+### ACID
+Atomicity, Consistency, Isolation, Durability. All succeed or all fail — no partial state.
+
+### Two styles
+```typescript
+// Sequential array — simple, can't read then conditionally write
+const [debit, credit] = await prisma.$transaction([
+  prisma.account.update({ where: { id: 'a' }, data: { balance: { decrement: 1000 } } }),
+  prisma.account.update({ where: { id: 'b' }, data: { balance: { increment: 1000 } } })
+])
+
+// Interactive callback — read then validate then write
+const result = await prisma.$transaction(async (tx) => {
+  const account = await tx.account.findUnique({ where: { id: 'a' } })
+  if (account.balance < 1000) throw new Error('Insufficient funds')
+  await tx.account.update({ where: { id: 'a' }, data: { balance: { decrement: 1000 } } })
+  await tx.account.update({ where: { id: 'b' }, data: { balance: { increment: 1000 } } })
+}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+```
+
+### Isolation levels
+| Level | Prevents | Use when |
+|---|---|---|
+| ReadCommitted | Dirty reads (default) | Dashboards, reports |
+| RepeatableRead | Dirty + non-repeatable reads | Inventory checks |
+| Serializable | All anomalies | Money transfers, payments |
+
+### Idempotency key — prevent double charge
+Check idempotencyKey inside the transaction before processing. Return existing if found.
+
+### P2034 — safe to retry
+```typescript
+async function withRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn()
+    } catch (error: any) {
+      if (error.code === 'P2034' && i < retries - 1) {
+        await new Promise(resolve => setTimeout(resolve, 50 * (i + 1)))
+        continue
+      }
+      throw error
+    }
+  }
+  throw new Error('Max retries exceeded')
+}
+```
+
+### DB retry vs Kafka retry
+- DB retry → fix the write before it commits (P2034, timing-based conflict)
+- Kafka retry → fix the side effect after it committed (SMS, webhook, fraud check)
+
+---
+
+## Day 12 — Raw SQL + When to Escape Prisma
+**Thu Apr 16**
+
+### Three methods
+```typescript
+// $queryRaw — read data, returns typed results with generic
+const users = await prisma.$queryRaw<{ id: string; email: string }[]>`
+  SELECT id, email FROM "UserBlog" WHERE age > 25
+`
+
+// $executeRaw — mutations, returns affected row count
+const affected = await prisma.$executeRaw`
+  UPDATE "UserBlog" SET "isActive" = false WHERE "lastLoginAt" < NOW() - INTERVAL '90 days'
+`
+
+// $queryRawUnsafe — only for dynamic table/column names, never user input
+await prisma.$queryRawUnsafe(`SELECT * FROM "${hardcodedTableName}"`)
+```
+
+### SQL injection safety
+Tagged template syntax is safe — Prisma parameterizes `${}` values automatically. Never use `$queryRawUnsafe` with user input.
+
+### When NOT to use Prisma ORM
+1. Complex aggregations — CTEs, window functions
+2. Bulk operations at scale — raw INSERT faster than createMany
+3. Full-text search — Postgres `to_tsvector` not exposed by Prisma
+4. Generated SQL is too slow — EXPLAIN ANALYZE shows Seq Scan you can't fix
+5. Query API more complex than equivalent SQL
+
+### EXPLAIN ANALYZE
+- `Seq Scan` → bad, needs index
+- `Index Scan` → good
+- `Bitmap Heap Scan` → acceptable
+
+---
+
+## Day 13 — Soft Deletes + Audit Trail
+**Thu Apr 17**
+
+### deletedAt pattern
+```prisma
+model UserBlog {
+  deletedAt DateTime?  // null = active, timestamp = soft deleted
+}
+```
+
+### Global soft delete middleware
+```typescript
+prisma.$use(async (params, next) => {
+  if (['UserBlog', 'Post'].includes(params.model ?? '')) {
+    if (params.action === 'findMany' || params.action === 'findFirst') {
+      params.args.where = { ...params.args.where, deletedAt: null }
+    }
+    if (params.action === 'delete') {
+      params.action = 'update'
+      params.args.data = { deletedAt: new Date() }
+    }
+    if (params.action === 'deleteMany') {
+      params.action = 'updateMany'
+      params.args.data = { deletedAt: new Date() }
+    }
+  }
+  return next(params)
+})
+```
+
+### AuditLog schema
+```prisma
+model AuditLog {
+  id        String   @id @default(uuid())
+  model     String
+  recordId  String
+  action    String   // "CREATE", "UPDATE", "DELETE"
+  before    Json?
+  after     Json?
+  userId    String?
+  createdAt DateTime @default(now())
+  @@index([model, recordId])
+  @@index([createdAt])
+}
+```
+
+### Audit middleware — key points
+- Capture `before` state with `findUnique` BEFORE calling `next(params)`
+- Capture `after` state from the result of `next(params)`
+- Use `(prisma as any)[modelName]` for dynamic model access — TypeScript can't verify dynamic string keys
+- Convert model name: `params.model.charAt(0).toLowerCase() + params.model.slice(1)`
+
+### Restore soft-deleted record
+```typescript
+// Find deleted — must use explicit filter to bypass middleware
+const deleted = await prisma.userBlog.findFirst({
+  where: { id, deletedAt: { not: null } }
+})
+// Restore
+await prisma.userBlog.update({ where: { id }, data: { deletedAt: null } })
+```
+
+---
+
+## Day 14 — Consolidation: Repo Layer
+**Mon Apr 21**
+
+### Fintech schema additions
+```prisma
+model Account {
+  id           String      @id @default(uuid())
+  userId       String
+  type         AccountType
+  balance      Float       @default(0)
+  deletedAt    DateTime?
+  transactions Transaction[]
+  user         UserBlog    @relation(fields: [userId], references: [id])
+}
+
+model Transaction {
+  id             String            @id @default(uuid())
+  accountId      String
+  amount         Float
+  type           TransactionType
+  status         TransactionStatus @default(PENDING)
+  idempotencyKey String            @unique
+  createdAt      DateTime          @default(now())
+  account        Account           @relation(fields: [accountId], references: [id])
+}
+```
+
+### Key patterns from consolidation
+```typescript
+// Atomic balance update — no read-then-write needed
+prisma.account.update({
+  where: { id },
+  data: { balance: type === 'increment' ? { increment: amount } : { decrement: amount } }
+})
+
+// sumByAccountId — use aggregate not groupBy
+const result = await prisma.transaction.aggregate({
+  where: { accountId },
+  _sum: { amount: true }
+})
+return result._sum.amount ?? 0
+
+// transferFunds — 6 steps
+// 1. Check idempotency key (inside tx)
+// 2. Validate sender balance
+// 3. Debit sender
+// 4. Credit receiver
+// 5. Record DEBIT transaction
+// 6. Record CREDIT transaction (idempotencyKey + '_credit')
+```
+
+### Error codes reminder
+- `P2002` — unique constraint — don't retry
+- `P2025` — record not found — don't retry
+- `P2034` — serialization conflict — safe to retry
+
+---
+
+## Day 15 — Indexes + Query Plans
+**Tue Apr 22**
+
+### @@index in Prisma
+```prisma
+@@index([userId])              // single field
+@@index([userId, createdAt])   // composite — leading column rule applies
+```
+`@id`, `@unique`, `@@unique` all auto-create indexes.
+
+### Composite index — leading column rule
+`@@index([userId, createdAt])` helps:
+- filter by `userId` alone ✓
+- filter by `userId + createdAt` ✓
+- filter by `createdAt` alone ✗ — leading column missing
+
+### EXPLAIN ANALYZE
+```typescript
+await prisma.$queryRaw`EXPLAIN ANALYZE SELECT * FROM "Post" WHERE "userId" = ${userId}`
+```
+- `Seq Scan` → needs index
+- `Index Scan` → efficient
+- `Bitmap Heap Scan` → acceptable
+
+### Partial indexes — via custom migration
+```sql
+CREATE INDEX "Post_userId_published_idx" ON "Post"("userId") WHERE published = true;
+```
+
+### Slow patterns Prisma generates
+1. Filtering on unindexed relation field
+2. Ordering on unindexed column
+3. include on unindexed FK — `postId IN (...)` with no index on `postId`
+
+### Workflow
+Enable `log: ['query']` → EXPLAIN ANALYZE → add `@@index` → if still slow → `$queryRaw`
+
+---
+
+## Day 16 — Connection Pooling
+**Wed Apr 23**
+
+### Singleton — most important rule
+One PrismaClient per process. Never instantiate inside a request handler. Module-level code runs once and is cached by Node.js module system.
+
+### Lambda singleton pattern
+```typescript
+declare global { var prisma: PrismaClient | undefined }
+const prisma = global.prisma ?? new PrismaClient({
+  datasources: { db: { url: process.env.DATABASE_URL + '?connection_limit=1' } }
+})
+if (process.env.NODE_ENV !== 'production') global.prisma = prisma
+export default prisma
+```
+
+### connection_limit calculation
+`connection_limit = total usable connections ÷ number of instances`
+- ECS db.t3.medium (340 max), 10 tasks, 40 reserved: `300 ÷ 10 = 30`
+- Lambda db.t3.micro (85 max): `connection_limit=1` per Lambda instance
+
+### PgBouncer modes
+| Mode | Efficiency | Prisma $transaction | Use |
+|---|---|---|---|
+| Session | Low | Works fine | Safe default |
+| Transaction | High | Breaks without pgbouncer=true | Add ?pgbouncer=true |
+| Statement | Highest | Completely broken | Never |
+
+### Why transaction mode breaks Prisma
+PgBouncer releases the Postgres connection after each query. Prisma's interactive transaction spans multiple queries — they end up on different Postgres connections. `BEGIN` on C1, `COMMIT` on C3 — no open transaction.
+
+### RDS Proxy
+AWS managed pooler. IAM auth, automatic failover, multiplexing. Best choice for ECS + RDS setup. No special Prisma config — just change the endpoint URL.
+
+### idle in transaction
+Transaction opened but never committed/rolled back. Fix: use `$transaction()` — handles COMMIT/ROLLBACK automatically. Detect: `pg_stat_activity WHERE state = 'idle in transaction'`. Kill: `pg_terminate_backend(pid)`.
+
+---
+
+## Day 17 — Prisma in Lambda + ECS
+**Thu Apr 24**
+
+### Binary target problem
+Prisma generates a Rust query engine binary that must match the deployment OS. Mismatch = runtime crash (not build-time).
+
+```prisma
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+```
+
+### Binary targets
+| Target | Use for |
+|---|---|
+| native | Local dev machine |
+| rhel-openssl-3.0.x | Amazon Linux 2023 — Lambda Node 20, ECS Fargate |
+| rhel-openssl-1.0.x | Amazon Linux 2 — older Lambda runtimes |
+| linux-arm64-openssl-3.0.x | Graviton ARM-based Lambda/ECS |
+| debian-openssl-3.0.x | Ubuntu/Debian containers |
+
+### Dockerfile — multi-stage ECS
+```dockerfile
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY prisma ./prisma
+RUN npx prisma generate
+COPY . .
+RUN npm run build
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+EXPOSE 3000
+CMD ["node", "dist/index.js"]
+```
+
+### Migration deployment — why separate step
+Three reasons:
+1. Old app keeps running if migration fails — users see no downtime
+2. No ECS restart loop — entrypoint.sh crash → ECS restarts → checksum mismatch → loops
+3. Separation of concerns — infrastructure operation needs controlled execution, not buried in app startup
+
+```bash
+# CI/CD pipeline
+aws ecs run-task --cluster my-cluster --task-definition migrate-task \
+  --overrides '{"containerOverrides":[{"name":"app","command":["npx","prisma","migrate","deploy"]}]}'
+aws ecs wait tasks-stopped --cluster my-cluster --tasks $TASK_ARN
+aws ecs update-service --cluster my-cluster --service my-service --force-new-deployment
+```
+
+### DATABASE_URL via Secrets Manager
+```json
+{ "secrets": [{ "name": "DATABASE_URL", "valueFrom": "arn:aws:secretsmanager:..." }] }
+```
+
+### Cold start impact
+| Scenario | Cold start |
+|---|---|
+| Without Prisma | ~200ms |
+| With Prisma | ~800–1200ms (30MB binary) |
+| Provisioned concurrency | ~0ms |
+| ECS Fargate | No cold starts |
+
+### ECS vs Lambda
+- ECS → always-on APIs, no cold starts, connection_limit = usable ÷ task count
+- Lambda → async jobs, reports, emails, connection_limit = 1
 
 ---
 
@@ -601,19 +906,31 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS "User_name_idx" ON "User"("name");
 > "Enable `log: ['query']` to spot it in the terminal. It happens when you fetch related data inside a loop — one query per iteration. Fix with `include` — Prisma batches all IDs into a single IN clause, always 2 queries regardless of data size. Optimize further with `select` inside `include` to avoid over-fetching."
 
 ### Cursor vs offset pagination
-> "Offset requires Postgres to scan and discard all prior rows — `OFFSET 10000` scans 10,000 rows to return 10. Cursor uses an index to jump directly to the right position — same speed on page 1 or page 10,000. Cursor is also stable under inserts."
+> "Offset requires Postgres to scan and discard all prior rows — `OFFSET 10000` scans 10,000 rows to return 10. Cursor uses an index to jump directly — same speed on page 1 or page 10,000. Cursor is also stable under inserts."
 
 ### When NOT to use Prisma
-> "Complex reporting queries with CTEs or window functions, bulk operations at scale, full-text search, or when EXPLAIN ANALYZE shows Prisma generating a slow query I can't override. I'd drop to `$queryRaw` and write SQL directly, adding a TypeScript generic for type safety."
+> "Complex reporting with CTEs or window functions, bulk operations at scale, full-text search, or when EXPLAIN ANALYZE shows a Seq Scan I can't fix. Drop to `$queryRaw` with a TypeScript generic for type safety."
 
 ### Rename column with zero downtime
-> "Expand-contract: Migration 1 adds the new column and backfills data, deploy code that writes to both. Migration 2 drops the old column after code no longer references it. Never rename directly — it locks the table and breaks running instances."
+> "Expand-contract: Migration 1 adds the new column and backfills data, deploy code that writes to both. Migration 2 drops the old column after code no longer references it."
 
 ### Failed migration recovery
-> "Run `migrate status` to see what failed. Connect to the DB and assess partial state. If reverting, undo the partial SQL manually and run `migrate resolve --rolled-back`. If completing, finish the SQL manually and run `migrate resolve --applied`. Verify with `migrate status` before redeploying."
+> "Run `migrate status`. Assess partial DB state. Revert manually then `migrate resolve --rolled-back`, or finish manually then `migrate resolve --applied`. Verify with `migrate status`."
+
+### Transactions — two styles
+> "$transaction([]) for simple sequential ops. Interactive callback for read-then-validate-then-write. Serializable isolation for money transfers. P2034 = serialization conflict = safe to retry with exponential backoff."
+
+### Soft deletes
+> "Add nullable `deletedAt` DateTime. Use `$use()` middleware to inject `deletedAt: null` on all reads and convert deletes to updates globally. Developers never need to remember the filter."
+
+### Connection pooling in ECS
+> "Singleton PrismaClient, one per process. connection_limit = usable connections ÷ task count. RDS Proxy for multiplexing and automatic failover. Never instantiate PrismaClient inside a request handler."
+
+### Deploy Prisma in ECS
+> "binaryTargets includes rhel-openssl-3.0.x. prisma generate in Docker build stage. Migrations as separate ECS one-off task before deploying app — three reasons: old app keeps running on failure, no restart loop risk, separation of concerns. DATABASE_URL from Secrets Manager."
 
 ### Idempotent migration
-> "Write SQL with `IF NOT EXISTS` guards and `WHERE IS NULL` on backfill — so it can run multiple times without overwriting already-migrated data or throwing duplicate errors."
+> "Write SQL with `IF NOT EXISTS` guards and `WHERE IS NULL` on backfill — safe to run multiple times without overwriting already-migrated data."
 
 ---
 
@@ -626,18 +943,18 @@ npx prisma init
 npx prisma generate
 
 # Migrations
-npx prisma migrate dev --name description     # local dev
-npx prisma migrate deploy                      # production
-npx prisma migrate status                      # check state
-npx prisma migrate dev --create-only           # generate SQL without applying
-npx prisma migrate resolve --rolled-back name  # mark as rolled back
-npx prisma migrate resolve --applied name      # mark as applied
+npx prisma migrate dev --name description
+npx prisma migrate deploy
+npx prisma migrate status
+npx prisma migrate dev --create-only
+npx prisma migrate resolve --rolled-back name
+npx prisma migrate resolve --applied name
 
 # Run files
 npx ts-node src/day1.ts
 
 # Inspect
-npx prisma studio                              # browser UI at localhost:5555
+npx prisma studio
 ```
 
 ---
@@ -656,13 +973,13 @@ npx prisma studio                              # browser UI at localhost:5555
 | Day 8 | Nested writes + aggregations | ✓ |
 | Day 9 | Mock round 1 | skipped |
 | Day 10 | Migrations deep dive | ✓ |
-| Day 11 | Transactions | upcoming |
-| Day 12 | Raw SQL + when to escape | upcoming |
-| Day 13 | Soft deletes + audit trail | upcoming |
-| Day 14 | Consolidation — repo layer | upcoming |
-| Day 15 | Indexes + query plans | upcoming |
-| Day 16 | Connection pooling | upcoming |
-| Day 17 | Prisma in Lambda + ECS | upcoming |
+| Day 11 | Transactions | ✓ |
+| Day 12 | Raw SQL + when to escape | ✓ |
+| Day 13 | Soft deletes + audit trail | ✓ |
+| Day 14 | Consolidation — repo layer | ✓ |
+| Day 15 | Indexes + query plans | ✓ |
+| Day 16 | Connection pooling | ✓ |
+| Day 17 | Prisma in Lambda + ECS | ✓ |
 | Day 18 | Multi-tenancy + seeding | upcoming |
 | Day 19 | System design: payment ledger | upcoming |
 | Day 20 | Capstone: fintech schema | upcoming |
