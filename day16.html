@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prisma Day 17 — Prisma in Lambda + ECS</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Fraunces:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: #2a2a2a;
+    --accent: #5DCAA5;
+    --accent2: #7F77DD;
+    --warn: #EF9F27;
+    --danger: #E24B4A;
+    --blue: #85B7EB;
+    --text: #e8e8e2;
+    --muted: #888880;
+    --faint: #444440;
+    --mono: 'JetBrains Mono', monospace;
+    --serif: 'Fraunces', serif;
+    --sans: 'DM Sans', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.7; }
+
+  header { border-bottom: 1px solid var(--border); padding: 48px 60px 40px; position: relative; overflow: hidden; }
+  header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 300px; height: 300px; background: radial-gradient(circle, rgba(133,183,235,0.07) 0%, transparent 70%); pointer-events: none; }
+  .header-tag { font-family: var(--mono); font-size: 11px; color: var(--blue); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  header h1 { font-family: var(--serif); font-size: 36px; font-weight: 600; color: #fff; line-height: 1.2; margin-bottom: 8px; }
+  header h1 em { font-style: italic; color: var(--blue); }
+  header p { font-size: 14px; color: var(--muted); max-width: 560px; }
+  .header-meta { display: flex; gap: 24px; margin-top: 24px; flex-wrap: wrap; }
+  .meta-chip { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); padding: 4px 12px; border-radius: 20px; }
+  .meta-chip span { color: var(--text); }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 48px 60px 80px; }
+
+  .section { margin-bottom: 52px; }
+  .section-label { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--blue); margin-bottom: 6px; }
+  .section h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
+  p { color: var(--text); margin-bottom: 12px; line-height: 1.75; }
+  p:last-child { margin-bottom: 0; }
+
+  .code-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 16px 0; overflow: hidden; }
+  .code-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .code-lang { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .code-label { font-family: var(--mono); font-size: 10px; color: var(--blue); }
+  .code-label.good { color: var(--accent); }
+  .code-label.danger { color: var(--danger); }
+  .code-label.warn { color: var(--warn); }
+  pre { padding: 20px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; color: var(--text); }
+  .kw { color: #7F77DD; }
+  .str { color: #5DCAA5; }
+  .cm { color: #555550; font-style: italic; }
+  .dec { color: #EF9F27; }
+  .type { color: #85B7EB; }
+  .num { color: #F0997B; }
+  .fn { color: #e8e8e2; }
+  .good { color: #5DCAA5; }
+  .bad { color: #E24B4A; }
+
+  code { font-family: var(--mono); font-size: 12px; background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--accent); }
+
+  .callout { border-left: 3px solid; border-radius: 0 6px 6px 0; padding: 14px 18px; margin: 16px 0; }
+  .callout-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+  .callout p { margin: 0; font-size: 13px; }
+  .callout.interview { border-color: var(--warn); background: rgba(239,159,39,0.06); }
+  .callout.interview .callout-label { color: var(--warn); }
+  .callout.gotcha { border-color: var(--danger); background: rgba(226,75,74,0.06); }
+  .callout.gotcha .callout-label { color: var(--danger); }
+  .callout.tip { border-color: var(--accent); background: rgba(93,202,165,0.06); }
+  .callout.tip .callout-label { color: var(--accent); }
+  .callout.rule { border-color: var(--accent2); background: rgba(127,119,221,0.06); }
+  .callout.rule .callout-label { color: var(--accent2); }
+
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); padding: 10px 14px; text-align: left; font-weight: 400; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--mono); font-size: 12px; color: var(--blue); }
+  td.desc { color: var(--muted); font-size: 13px; }
+  td.good { color: var(--accent); font-size: 13px; }
+  td.bad { color: var(--danger); font-size: 13px; }
+
+  .target-grid { display: grid; grid-template-columns: 1fr; gap: 6px; margin: 16px 0; }
+  .target-row { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; display: flex; gap: 16px; align-items: center; }
+  .target-name { font-family: var(--mono); font-size: 12px; color: var(--accent); width: 280px; flex-shrink: 0; }
+  .target-desc { font-size: 12.5px; color: var(--muted); }
+
+  .deploy-flow { margin: 16px 0; }
+  .deploy-step { display: flex; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--faint); align-items: flex-start; }
+  .deploy-step:last-child { border-bottom: none; }
+  .deploy-num { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--bg); background: var(--blue); width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .deploy-body h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+  .deploy-body p { font-size: 12px; color: var(--muted); margin: 0; }
+
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .compare-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .compare-card h4 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .compare-card.separate h4 { color: var(--accent); }
+  .compare-card.entrypoint h4 { color: var(--warn); }
+  .compare-card ul { list-style: none; padding: 0; }
+  .compare-card ul li { font-size: 12.5px; color: var(--muted); padding: 4px 0 4px 14px; position: relative; border-bottom: 1px solid var(--faint); }
+  .compare-card ul li:last-child { border-bottom: none; }
+  .compare-card ul li::before { content: '›'; position: absolute; left: 2px; }
+  .compare-card.separate ul li::before { color: var(--accent); }
+  .compare-card.entrypoint ul li::before { color: var(--warn); }
+
+  .reason-list { list-style: none; padding: 0; }
+  .reason-list li { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); align-items: flex-start; }
+  .reason-list li:last-child { border-bottom: none; }
+  .reason-num { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--bg); background: var(--accent); width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .reason-body h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .reason-body p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; border-top: 2px solid var(--blue); }
+  .summary-card h4 { font-family: var(--mono); font-size: 11px; color: var(--blue); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .summary-card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+  footer { border-top: 1px solid var(--border); padding: 24px 60px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  footer p { font-family: var(--mono); font-size: 11px; color: var(--faint); margin: 0; }
+  .next-day { font-family: var(--mono); font-size: 11px; color: var(--accent); background: rgba(93,202,165,0.08); border: 1px solid rgba(93,202,165,0.2); padding: 6px 14px; border-radius: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">Prisma Study Plan · April 2025</div>
+  <h1>Day 17 — <em>Prisma in Lambda + ECS</em></h1>
+  <p>binaryTargets · Dockerfile · migrate deploy pipeline · Secrets Manager · cold start · ECS vs Lambda</p>
+  <div class="header-meta">
+    <div class="meta-chip">Phase <span>4 of 5</span></div>
+    <div class="meta-chip">Date <span>Thu Apr 24</span></div>
+    <div class="meta-chip">Stack <span>Prisma 5 · AWS · ECS · Lambda</span></div>
+    <div class="meta-chip">Status <span style="color:#5DCAA5">✓ Complete</span></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── BINARY TARGET ── -->
+  <div class="section">
+    <div class="section-label">01</div>
+    <h2>The binary target problem</h2>
+
+    <p>Prisma generates a query engine — a compiled Rust binary that handles actual DB communication. The binary must match the OS it runs on.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">text</span><span class="code-label danger">mismatch = runtime crash</span></div>
+      <pre>Your dev machine (macOS)   → generates darwin binary
+Lambda / ECS (Linux)       → needs linux binary
+<span class="bad">Mismatch → Prisma throws at runtime — not at build time</span></pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">prisma</span><span class="code-label good">fix — binaryTargets in schema.prisma</span></div>
+      <pre><span class="kw">generator</span> client {
+  provider      = <span class="str">"prisma-client-js"</span>
+  binaryTargets = [<span class="str">"native"</span>, <span class="str">"rhel-openssl-3.0.x"</span>]
+  <span class="cm">//               ↑          ↑</span>
+  <span class="cm">//               local dev   Lambda / ECS Amazon Linux 2023</span>
+}</pre>
+    </div>
+
+    <div class="target-grid">
+      <div class="target-row">
+        <span class="target-name">native</span>
+        <span class="target-desc">Your current machine — macOS, Windows, Linux dev</span>
+      </div>
+      <div class="target-row">
+        <span class="target-name">rhel-openssl-3.0.x</span>
+        <span class="target-desc">Amazon Linux 2023 — Lambda Node 20, ECS Fargate</span>
+      </div>
+      <div class="target-row">
+        <span class="target-name">rhel-openssl-1.0.x</span>
+        <span class="target-desc">Amazon Linux 2 — older Lambda runtimes</span>
+      </div>
+      <div class="target-row">
+        <span class="target-name">linux-arm64-openssl-3.0.x</span>
+        <span class="target-desc">Graviton — ARM-based Lambda/ECS (cheaper, faster)</span>
+      </div>
+      <div class="target-row">
+        <span class="target-name">debian-openssl-3.0.x</span>
+        <span class="target-desc">Ubuntu, Debian based containers</span>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">After adding binaryTargets</div>
+      <p>Run <code>npx prisma generate</code> — regenerates the client with both binaries. The Linux binary gets baked into your Docker image during build. Both binaries add ~60MB to node_modules — acceptable tradeoff.</p>
+    </div>
+  </div>
+
+  <!-- ── DOCKERFILE ── -->
+  <div class="section">
+    <div class="section-label">02</div>
+    <h2>Dockerfile for ECS Fargate</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">dockerfile</span><span class="code-label good">multi-stage build</span></div>
+      <pre><span class="cm"># Stage 1 — build</span>
+FROM node:<span class="num">20</span>-alpine <span class="kw">AS</span> builder
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY prisma ./prisma
+RUN npx prisma generate   <span class="cm"># generates client + Linux binary</span>
+
+COPY . .
+RUN npm run build
+
+<span class="cm"># Stage 2 — production image</span>
+FROM node:<span class="num">20</span>-alpine <span class="kw">AS</span> runner
+WORKDIR /app
+
+<span class="cm"># Copy only what's needed — keeps image small</span>
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+
+<span class="cm"># Non-root user — security best practice</span>
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+
+EXPOSE <span class="num">3000</span>
+CMD [<span class="str">"node"</span>, <span class="str">"dist/index.js"</span>]</pre>
+    </div>
+
+    <div class="callout rule">
+      <div class="callout-label">Key points</div>
+      <p><code>prisma generate</code> runs during build — binary baked into the image. <code>node_modules</code> copied from builder — includes the generated client. Non-root user — container security best practice. Two-stage build — final image doesn't include build tools.</p>
+    </div>
+  </div>
+
+  <!-- ── MIGRATIONS IN CI/CD ── -->
+  <div class="section">
+    <div class="section-label">03</div>
+    <h2>Running migrations in CI/CD</h2>
+
+    <p>Never run <code>migrate dev</code> in production. The correct deployment sequence:</p>
+
+    <div class="deploy-flow">
+      <div class="deploy-step">
+        <div class="deploy-num">1</div>
+        <div class="deploy-body">
+          <h4>Build Docker image</h4>
+          <p>prisma generate runs here — binary baked in. Push to ECR.</p>
+        </div>
+      </div>
+      <div class="deploy-step">
+        <div class="deploy-num">2</div>
+        <div class="deploy-body">
+          <h4>Run migrations — separate step</h4>
+          <p>ECS one-off task or entrypoint.sh. npx prisma migrate deploy only.</p>
+        </div>
+      </div>
+      <div class="deploy-step">
+        <div class="deploy-num">3</div>
+        <div class="deploy-body">
+          <h4>Deploy new ECS task</h4>
+          <p>Only after migration succeeds. Old tasks still running until new ones are healthy.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="compare-grid">
+      <div class="compare-card separate">
+        <h4>Separate ECS task — recommended</h4>
+        <ul>
+          <li>Migration fails → pipeline stops</li>
+          <li>Old app keeps running untouched</li>
+          <li>Users see zero downtime</li>
+          <li>Human watching the pipeline</li>
+          <li>No restart loop risk</li>
+        </ul>
+      </div>
+      <div class="compare-card entrypoint">
+        <h4>entrypoint.sh — simple but riskier</h4>
+        <ul>
+          <li>Migration + app in one container</li>
+          <li>Crash mid-migration → ECS restart loop</li>
+          <li>Harder to recover</li>
+          <li>OK for staging or simple deploys</li>
+          <li>Never for fintech production</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><span class="code-label good">Pattern A — ECS one-off task (recommended)</span></div>
+      <pre><span class="cm"># Run migrations as separate ECS task before deploying app</span>
+aws ecs run-task \
+  --cluster my-cluster \
+  --task-definition migrate-task \
+  --overrides <span class="str">'{"containerOverrides":[{"name":"app","command":["npx","prisma","migrate","deploy"]}]}'</span>
+
+<span class="cm"># Wait for migration to complete before deploying app</span>
+aws ecs wait tasks-stopped --cluster my-cluster --tasks $TASK_ARN
+
+<span class="cm"># Then deploy the main app</span>
+aws ecs update-service --cluster my-cluster --service my-service --force-new-deployment</pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><span class="code-label warn">Pattern B — entrypoint.sh (simple, riskier)</span></div>
+      <pre><span class="cm">#!/bin/sh</span>
+echo <span class="str">"Running migrations..."</span>
+npx prisma migrate deploy
+
+echo <span class="str">"Starting app..."</span>
+exec node dist/index.js</pre>
+    </div>
+  </div>
+
+  <!-- ── WHY SEPARATE STEP ── -->
+  <div class="section">
+    <div class="section-label">04</div>
+    <h2>Why separate migration step — three reasons</h2>
+
+    <ul class="reason-list">
+      <li>
+        <div class="reason-num">1</div>
+        <div class="reason-body">
+          <h4>Old app keeps serving traffic on failure</h4>
+          <p>Separate step: migration fails → pipeline stops → old task untouched → users unaffected. Inside startup: ECS starts replacing old tasks, new task crashes, rollback window where some requests hit crashing containers.</p>
+        </div>
+      </li>
+      <li>
+        <div class="reason-num">2</div>
+        <div class="reason-body">
+          <h4>No restart loop risk</h4>
+          <p>entrypoint.sh crashes mid-migration → ECS restarts container → runs migrate deploy again → Prisma detects checksum mismatch → crashes again → ECS loops indefinitely. Separate step runs once in pipeline — no restart risk.</p>
+        </div>
+      </li>
+      <li>
+        <div class="reason-num">3</div>
+        <div class="reason-body">
+          <h4>Separation of concerns</h4>
+          <p>App startup should be fast and predictable. migrate deploy is a one-time infrastructure operation that needs controlled execution, proper logging, alerting, and a human watching the pipeline — not buried in container startup logs.</p>
+        </div>
+      </li>
+    </ul>
+  </div>
+
+  <!-- ── SECRETS MANAGER ── -->
+  <div class="section">
+    <div class="section-label">05</div>
+    <h2>DATABASE_URL via Secrets Manager</h2>
+
+    <p>Never hardcode connection strings in your image. Inject from AWS Secrets Manager via ECS task definition:</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">json</span><span class="code-label good">ECS task definition — secrets injection</span></div>
+      <pre>{
+  <span class="str">"secrets"</span>: [
+    {
+      <span class="str">"name"</span>: <span class="str">"DATABASE_URL"</span>,
+      <span class="str">"valueFrom"</span>: <span class="str">"arn:aws:secretsmanager:us-east-1:123456789:secret:prod/db/url"</span>
+    }
+  ]
+}
+<span class="cm">// process.env.DATABASE_URL just works in your code — no SDK call needed</span></pre>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-label">Why this approach</div>
+      <p>No credentials in Docker image or environment variables visible in ECS console. Secrets Manager handles rotation automatically. IAM controls who can read the secret. Works with RDS Proxy IAM auth for zero-credential rotation.</p>
+    </div>
+  </div>
+
+  <!-- ── LAMBDA SETUP ── -->
+  <div class="section">
+    <div class="section-label">06</div>
+    <h2>Lambda — complete production setup</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">typescript</span><span class="code-label good">Lambda handler — full pattern</span></div>
+      <pre><span class="kw">import</span> { <span class="type">PrismaClient</span> } <span class="kw">from</span> <span class="str">'@prisma/client'</span>
+
+<span class="cm">// Outside handler — module cache, survives warm starts</span>
+<span class="kw">declare global</span> { <span class="kw">var</span> prisma: <span class="type">PrismaClient</span> | <span class="kw">undefined</span> }
+
+<span class="kw">const</span> prisma = global.prisma ?? <span class="kw">new</span> <span class="type">PrismaClient</span>({
+  datasources: {
+    db: { url: process.env.<span class="type">DATABASE_URL</span> + <span class="str">'?connection_limit=1'</span> }
+  }
+})
+
+<span class="kw">if</span> (process.env.<span class="type">NODE_ENV</span> !== <span class="str">'production'</span>) global.prisma = prisma
+
+<span class="kw">export const</span> handler = <span class="kw">async</span> (event: <span class="kw">any</span>) => {
+  <span class="kw">try</span> {
+    <span class="kw">const</span> posts = <span class="kw">await</span> prisma.post.<span class="fn">findMany</span>({ take: <span class="num">10</span> })
+    <span class="kw">return</span> { statusCode: <span class="num">200</span>, body: <span class="type">JSON</span>.<span class="fn">stringify</span>(posts) }
+  } <span class="kw">catch</span> (error) {
+    console.<span class="fn">error</span>(error)
+    <span class="kw">return</span> { statusCode: <span class="num">500</span>, body: <span class="str">'Internal server error'</span> }
+  }
+}</pre>
+    </div>
+  </div>
+
+  <!-- ── COLD START ── -->
+  <div class="section">
+    <div class="section-label">07</div>
+    <h2>Cold start impact</h2>
+
+    <p>Prisma's query engine binary is ~30MB. Loading it on cold start adds significant latency.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Scenario</th><th>Cold start</th><th>Solution</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Without Prisma</td>
+            <td class="good">~200ms</td>
+            <td class="desc">—</td>
+          </tr>
+          <tr>
+            <td>With Prisma</td>
+            <td class="bad">~800–1200ms</td>
+            <td class="desc">Loading 30MB binary</td>
+          </tr>
+          <tr>
+            <td>Provisioned concurrency</td>
+            <td class="good">~0ms</td>
+            <td class="desc">Keeps Lambda warm — eliminates cold starts</td>
+          </tr>
+          <tr>
+            <td>Prisma Accelerate</td>
+            <td class="good">~200ms</td>
+            <td class="desc">Lightweight HTTP client — no binary</td>
+          </tr>
+          <tr>
+            <td>ECS Fargate</td>
+            <td class="good">No cold starts</td>
+            <td class="desc">Long-running process — always warm</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout rule">
+      <div class="callout-label">When cold start matters</div>
+      <p>User-facing APIs → use provisioned concurrency or move to ECS. Background jobs, event processing, infrequent tasks → cold start acceptable. Report generation, email sending → Lambda is fine.</p>
+    </div>
+  </div>
+
+  <!-- ── ECS VS LAMBDA ── -->
+  <div class="section">
+    <div class="section-label">08</div>
+    <h2>ECS vs Lambda — when to use each</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Aspect</th><th>ECS Fargate</th><th>Lambda</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Lifecycle</td>
+            <td class="desc">Long-running, always-on</td>
+            <td class="desc">Ephemeral, event-driven</td>
+          </tr>
+          <tr>
+            <td>Cold starts</td>
+            <td class="good">None</td>
+            <td class="bad">800-1200ms with Prisma</td>
+          </tr>
+          <tr>
+            <td>PrismaClient</td>
+            <td class="good">Singleton per task process</td>
+            <td class="desc">Singleton per container, global cache</td>
+          </tr>
+          <tr>
+            <td>connection_limit</td>
+            <td class="desc">usable ÷ task count</td>
+            <td class="desc">1 per Lambda instance</td>
+          </tr>
+          <tr>
+            <td>Migrations</td>
+            <td class="good">Separate ECS one-off task</td>
+            <td class="desc">Separate Lambda invoke or ECS task</td>
+          </tr>
+          <tr>
+            <td>Use for</td>
+            <td class="desc">Main API, always-on services</td>
+            <td class="desc">Async jobs, reports, emails, webhooks</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── INTERVIEW ANSWER ── -->
+  <div class="section">
+    <div class="section-label">09</div>
+    <h2>Interview answer</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">text</span><span class="code-label warn">"how do you deploy Prisma in ECS Fargate?"</span></div>
+      <pre><span class="str">"Set binaryTargets in schema.prisma to include rhel-openssl-3.0.x</span>
+<span class="str">for Amazon Linux. Run prisma generate during Docker build — binary</span>
+<span class="str">baked into the image. Migrations run as a separate ECS one-off task</span>
+<span class="str">before deploying the new app version — if migration fails the old app</span>
+<span class="str">keeps running. DATABASE_URL injected from Secrets Manager via ECS</span>
+<span class="str">task definition secrets. Singleton PrismaClient outside the request</span>
+<span class="str">handler with connection_limit set to usable connections divided by</span>
+<span class="str">task count. RDS Proxy sits between ECS and RDS for connection</span>
+<span class="str">multiplexing and automatic failover."</span>
+
+<span class="str">"Why separate migration step?"</span>
+<span class="str">"Three reasons: old app keeps running if migration fails, no ECS</span>
+<span class="str">restart loop risk from partial migration, and separation of concerns —</span>
+<span class="str">infrastructure operations should run in controlled pipeline steps,</span>
+<span class="str">not buried in container startup."</span></pre>
+    </div>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">10</div>
+    <h2>Day 17 summary</h2>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h4>binaryTargets</h4>
+        <p>Always set ["native", "rhel-openssl-3.0.x"] for ECS/Lambda. Mismatch = runtime crash.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Dockerfile</h4>
+        <p>prisma generate in builder stage. Copy node_modules + prisma to runner. Non-root user.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Migrate separate</h4>
+        <p>ECS one-off task before deploying app. Three reasons: safety, no restart loop, separation of concerns.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Secrets Manager</h4>
+        <p>Inject DATABASE_URL via ECS task definition secrets. Never hardcode in image or env vars.</p>
+      </div>
+      <div class="summary-card">
+        <h4>Lambda cold start</h4>
+        <p>~800-1200ms with Prisma binary. Fix: provisioned concurrency, Prisma Accelerate, or move to ECS.</p>
+      </div>
+      <div class="summary-card">
+        <h4>ECS vs Lambda</h4>
+        <p>ECS for always-on APIs. Lambda for async jobs, reports, emails. Both use singleton PrismaClient.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Prisma Study Plan · April 2025 · Anil</p>
+  <span class="next-day">Day 18 → Multi-tenancy + seeding</span>
+</footer>
+
+</body>
+</html>
